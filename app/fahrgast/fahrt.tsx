@@ -20,6 +20,7 @@ export default function FahrgastFahrt() {
   const [fahrerId, setFahrerId] = useState<string | null>(null);
   const [fahrerName, setFahrerName] = useState<string | null>(null);
   const [fahrerBewertung, setFahrerBewertung] = useState<number | null>(null);
+  const [fahrzeug, setFahrzeug] = useState<{ schildnummer?: string; marke?: string; jahrgang?: string; farbe?: string } | null>(null);
   const [chatOffen, setChatOffen] = useState(false);
   const [ungelesen, setUngelesen] = useState(0);
   const gelesenBisRef = useRef(0);
@@ -36,7 +37,7 @@ export default function FahrgastFahrt() {
     return onSnapshot(chatQ, (snap) => {
       const fremde = snap.docs.filter((d) => d.data().senderId !== meinUid).length;
       setUngelesen(Math.max(0, fremde - gelesenBisRef.current));
-    });
+    }, (err) => console.log('Chat-Listener Fehler (ignoriert):', err));
   }, [fahrtId]);
 
   // Fahrt-Status beobachten
@@ -58,7 +59,7 @@ export default function FahrgastFahrt() {
       setZielort(data.zielort);
       if (data.fahrerId) setFahrerId(data.fahrerId);
       if (data.preis != null) setPreis(data.preis);
-    });
+    }, (err) => console.log('Fahrt-Listener Fehler (ignoriert):', err));
   }, [fahrtId]);
 
   // Fahrer-Standort, Name und Bewertung beobachten
@@ -69,7 +70,8 @@ export default function FahrgastFahrt() {
       if (data?.standort) setFahrerStandort(data.standort);
       if (data?.name) setFahrerName(data.name);
       if (data?.bewertungsDurchschnitt != null) setFahrerBewertung(data.bewertungsDurchschnitt);
-    });
+      if (data?.fahrzeug) setFahrzeug(data.fahrzeug);
+    }, (err) => console.log('Fahrer-Listener Fehler (ignoriert):', err));
   }, [fahrerId]);
 
   const stornierenBestaetigen = async () => {
@@ -165,6 +167,12 @@ export default function FahrgastFahrt() {
             )}
           </View>
         )}
+        {fahrzeug && (
+          <View style={styles.fahrzeugInfo}>
+            <Text style={styles.fahrzeugMarke}>{fahrzeug.farbe} {fahrzeug.marke}{fahrzeug.jahrgang ? ` (${fahrzeug.jahrgang})` : ''}</Text>
+            <Text style={styles.fahrzeugSchild}>{fahrzeug.schildnummer}</Text>
+          </View>
+        )}
         {status === 'angenommen' && fahrerStandort && abholort && (
           <Text style={styles.distanz}>
             🚗 {formatDistanz(fahrerStandort, abholort)}
@@ -253,6 +261,16 @@ const styles = StyleSheet.create({
   },
   fahrerName: { fontSize: 14, fontWeight: '600', color: '#222' },
   fahrerBewertung: { fontSize: 13, color: '#555' },
+  fahrzeugInfo: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 4,
+    alignItems: 'center',
+  },
+  fahrzeugMarke: { fontSize: 13, color: '#fff', fontWeight: '500' },
+  fahrzeugSchild: { fontSize: 16, fontWeight: 'bold', color: '#FFD700', marginTop: 2 },
   chatButton: {
     position: 'absolute',
     bottom: 40,

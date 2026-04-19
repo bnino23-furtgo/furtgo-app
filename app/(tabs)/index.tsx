@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   ActivityIndicator,
@@ -8,8 +8,6 @@ import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 
 export default function Rollenweiterleitung() {
-  const [geprüft, setGeprüft] = useState(false);
-
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) {

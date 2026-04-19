@@ -22,8 +22,8 @@
     "mobilnummer": "Mobile number (e.g. +41 79 123 45 67)",
     "strasse": "Street and house number",
     "plzOrt": "Postal code and city (e.g. 8001 Zurich)",
-    "baujahr": "Vehicle year (from {{min}})",
-    "baujahrFehler": "Vehicle must not be older than 12 years (from {{min}}).",
+    "baujahr": "Vehicle year",
+    "baujahrFehler": "Year must not be in the future (max. {{jahr}}).",
     "ausweis": "ID / Passport / Residence permit (required)",
     "kamera": "📷 Camera",
     "galerie": "🖼 Gallery",
@@ -44,7 +44,12 @@
     "fehlerPasswort": "Wrong password.",
     "fehlerCredential": "Email or password is incorrect.",
     "fehlerEmailVergeben": "This email is already registered.",
-    "fehlerSchwachesPasswort": "Password must be at least 6 characters."
+    "fehlerSchwachesPasswort": "Password must be at least 6 characters.",
+    "fehlerEmailNichtBestaetigt": "Please verify your email first. Click the link in the confirmation email.",
+    "bestaetigungTitel": "✉️ Verification email sent",
+    "bestaetigungText": "We sent a verification link to {{email}}. Please click the link and log in again.",
+    "bestaetigungErneutSenden": "Resend verification email",
+    "bestaetigungErneutGesendet": "Verification email was resent. Please check your inbox."
   },
   "fahrer": {
     "dashboard": "Driver Dashboard",
@@ -68,7 +73,7 @@
     "zurueck": "Back",
     "aboAbgelaufen": "Subscription expired",
     "aboAbgelaufenText": "Your monthly subscription has expired. Please renew it to continue driving.",
-    "aboBezahlen": "Pay subscription – CHF 99/month",
+    "aboBezahlen": "Pay subscription – CHF 60/month",
     "wieHeisst": "What's your name?",
     "nameAngezeigt": "Your name will be shown to passengers",
     "deinName": "Your name",
@@ -76,7 +81,22 @@
     "standortFehlt": "Location missing",
     "standortFehltText": "Please allow location access in the browser to go online.",
     "benachrichtigung": "🚕 Furtgo — You are online",
-    "benachrichtigungText": "Waiting for new orders..."
+    "benachrichtigungText": "Waiting for new orders...",
+    "nichtBereitTitel": "You cannot go online yet",
+    "nichtBereitText": "Please complete all steps before going online.",
+    "schrittDokumente": "Documents uploaded",
+    "schrittVerifikation": "Admin approval received",
+    "schrittAbo": "Subscription active (CHF 60/month)",
+    "dokumenteHochladen": "Upload documents",
+    "willkommenTitel": "Welcome to Furtgo! 👋",
+    "willkommenSub": "3 steps and you're ready to go",
+    "willkommenSchritt1": "Upload documents",
+    "willkommenSchritt1Sub": "Vehicle registration, driver's license, criminal record",
+    "willkommenSchritt2": "Admin reviews your data",
+    "willkommenSchritt2Sub": "Usually within 24–48h — you'll get an email",
+    "willkommenSchritt3": "Activate subscription",
+    "willkommenSchritt3Sub": "CHF 60/month — no commission, keep all your earnings",
+    "losGehts": "Let's go"
   },
   "fahrt": {
     "zumFahrgast": "🧍 Driving to passenger",
@@ -108,7 +128,8 @@
     "bildschirmWachSub": "App stays in foreground",
     "meinAngebot": "My services",
     "meinAngebotSub": "Choose which services you offer",
-    "eigenTarif": "Custom rate"
+    "freiWaehlbar": "Custom rate",
+    "deineKategorie": "Your category"
   },
   "chat": {
     "titel": "💬 Chat",
@@ -131,7 +152,7 @@
     "aboAktiv": "Active until {{datum}}",
     "aboAbgelaufen": "Expired on {{datum}}",
     "keinAbo": "No active subscription",
-    "aboBezahlen": "💳 Pay subscription – CHF 30/month",
+    "aboBezahlen": "💳 Pay subscription – CHF 60/month",
     "fahrgastUebersicht": "Passenger Overview",
     "fahrtenGenutzt": "Rides taken",
     "persoenlicheDaten": "Personal Data",
@@ -194,9 +215,10 @@
     "emailFehler": "Unknown error sending receipt."
   },
   "tarife": {
-    "furtgoX": "Furtgo X",
-    "furtgoComfort": "Furtgo Comfort",
-    "eigenTarif": "Custom rate",
+    "furtgoMini": "Furtgo Mini",
+    "furtgoPlus": "Furtgo Plus",
+    "furtgoLimu": "Furtgo Limu",
+    "frei": "Custom rate",
     "nichtVerfuegbar": "not available"
   },
   "fahrgast": {

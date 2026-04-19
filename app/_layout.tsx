@@ -38,11 +38,15 @@ export default function RootLayout() {
     }, 6000);
 
     let unsubscribe = () => {};
+    let letzterStatus: boolean | null = null;
     try {
       unsubscribe = onAuthStateChanged(auth, (user) => {
         console.log('AUTH STATE CHANGED', user?.email);
+        const eingeloggt = !!user && user.emailVerified;
+        if (letzterStatus === eingeloggt) return;
+        letzterStatus = eingeloggt;
         clearTimeout(timeout);
-        navigate(!!user);
+        navigate(eingeloggt);
       });
     } catch (e) {
       console.log('AUTH ERROR', e);
@@ -59,6 +63,7 @@ export default function RootLayout() {
   if (laden || !i18nReady) {
     return (
       <View style={{ flex: 1, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' }}>
+        <StatusBar style="light" backgroundColor="#FFD700" />
         <ActivityIndicator size="large" color="#FFD700" />
       </View>
     );
@@ -66,6 +71,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <StatusBar style="light" backgroundColor="#FFD700" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="login" />
         <Stack.Screen name="(tabs)" />
@@ -80,7 +86,6 @@ export default function RootLayout() {
         <Stack.Screen name="profil" />
         <Stack.Screen name="admin" />
       </Stack>
-      <StatusBar style="auto" />
     </ThemeProvider>
   );
 }

@@ -15,15 +15,15 @@ async function spiele(name: SoundName) {
     const { createAudioPlayer } = await import('expo-audio');
     const player = createAudioPlayer(DATEIEN[name]);
     player.play();
-    setTimeout(() => { try { player.remove(); } catch (_) {} }, 10000);
-  } catch (_) {}
+    setTimeout(() => { try { player.remove(); } catch {} }, 10000);
+  } catch {}
 }
 
 async function spieleAuftrag() {
   try {
     const { createAudioPlayer } = await import('expo-audio');
     if (auftragPlayer) {
-      try { auftragPlayer.pause(); auftragPlayer.remove(); } catch (_) {}
+      try { auftragPlayer.pause(); auftragPlayer.remove(); } catch {}
       auftragPlayer = null;
     }
     const player = createAudioPlayer(DATEIEN['auftrag']);
@@ -33,16 +33,16 @@ async function spieleAuftrag() {
     auftragPlayer = player;
     setTimeout(() => {
       if (auftragPlayer === player) {
-        try { player.pause(); player.remove(); } catch (_) {}
+        try { player.pause(); player.remove(); } catch {}
         auftragPlayer = null;
       }
     }, 5000);
-  } catch (_) {}
+  } catch {}
 }
 
 function stopAuftrag() {
   if (auftragPlayer) {
-    try { auftragPlayer.pause(); auftragPlayer.remove(); } catch (_) {}
+    try { auftragPlayer.pause(); auftragPlayer.remove(); } catch {}
     auftragPlayer = null;
   }
 }

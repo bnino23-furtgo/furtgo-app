@@ -63,6 +63,7 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort }: Prop
     letztesZielRef.current = schluessel;
     ersteFitRef.current = false;
     fetchRoute(von, zielOrt).then(setRoute);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zielOrt?.latitude, zielOrt?.longitude, standort?.latitude, fahrerStandort?.latitude]);
 
   // Karte einmalig an Route anpassen

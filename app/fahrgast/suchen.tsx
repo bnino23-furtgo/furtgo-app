@@ -81,7 +81,7 @@ export default function FahrerSuchen() {
           })
           .catch((err) => console.error('Fahrer-Suche Fehler:', err));
       }
-    });
+    }, (err) => console.log('Suchen-Listener Fehler (ignoriert):', err));
 
     return unsubscribe;
   }, [fahrtId]);

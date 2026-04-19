@@ -58,7 +58,9 @@ export default function Verlauf() {
           .sort((a, b) => b.datum.getTime() - a.datum.getTime());
         setFahrten(liste);
       })
+      .catch((e) => console.log('Verlauf laden Fehler (ignoriert):', e))
       .finally(() => setLaden(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rolle]);
 
   const gefilterteFahrten = useMemo(() => {
@@ -108,13 +110,11 @@ export default function Verlauf() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <View style={styles.zurueckPill}>
-            <Text style={styles.zurueck}>{t('allgemein.zurueck')}</Text>
-          </View>
+        <TouchableOpacity onPress={() => router.back()} style={styles.zurueckBtn}>
+          <Text style={styles.zurueckPfeil}>&#x2039;</Text>
         </TouchableOpacity>
         <Text style={styles.titel}>{t('verlauf.titel')}</Text>
-        <View style={{ width: 60 }} />
+        <View style={{ width: 36 }} />
       </View>
 
       {/* Filter-Tabs */}
@@ -218,15 +218,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#222',
   },
-  zurueckPill: {
+  zurueckBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#16213e',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#333',
   },
-  zurueck: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  zurueckPfeil: { color: '#fff', fontSize: 22, fontWeight: '300', marginTop: -2 },
   titel: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
 
   tabs: {

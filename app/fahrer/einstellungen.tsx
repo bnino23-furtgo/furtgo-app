@@ -14,17 +14,33 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 
-type Kategorie = 'furtgo_x' | 'furtgo_comfort';
+type Kategorie = 'furtgo_mini' | 'furtgo_plus' | 'furtgo_limu';
 const TARIFE: Record<Kategorie, { grundpreis: number; proKm: number; label: string }> = {
-  furtgo_x: { grundpreis: 3.50, proKm: 2.20, label: 'Furtgo X' },
-  furtgo_comfort: { grundpreis: 5.00, proKm: 2.80, label: 'Furtgo Comfort' },
+  furtgo_mini: { grundpreis: 3.50, proKm: 2.20, label: 'Furtgo Mini' },
+  furtgo_plus: { grundpreis: 5.00, proKm: 2.80, label: 'Furtgo Plus' },
+  furtgo_limu: { grundpreis: 8.00, proKm: 6.00, label: 'Furtgo Limu' },
+};
+
+const fahrzeugKategorie = (jahrgang: number | undefined): Kategorie => {
+  if (!jahrgang) return 'furtgo_mini';
+  const alter = new Date().getFullYear() - jahrgang;
+  if (alter <= 5) return 'furtgo_limu';
+  if (alter <= 12) return 'furtgo_plus';
+  return 'furtgo_mini';
+};
+
+const erlaubteAngebote = (kat: Kategorie): string[] => {
+  if (kat === 'furtgo_limu') return ['furtgo_mini', 'furtgo_plus', 'furtgo_limu', 'frei'];
+  if (kat === 'furtgo_plus') return ['furtgo_mini', 'furtgo_plus', 'frei'];
+  return ['furtgo_mini', 'frei'];
 };
 
 export default function FahrerEinstellungen() {
   const { t } = useTranslation();
   const [bildschirmWach, setBildschirmWach] = useState(false);
-  const [angebote, setAngebote] = useState<string[]>(['furtgo_x', 'furtgo_comfort']);
-  const [eigenProKm, setEigenProKm] = useState(2.20);
+  const [angebote, setAngebote] = useState<string[]>(['furtgo_mini']);
+  const [freiProKm, setFreiProKm] = useState(2.20);
+  const [fahrerKat, setFahrerKat] = useState<Kategorie>('furtgo_mini');
 
   useEffect(() => {
     // Bildschirm-Einstellung laden
@@ -32,38 +48,43 @@ export default function FahrerEinstellungen() {
       if (wert === 'true') setBildschirmWach(true);
     });
 
-    // Angebote aus Firestore laden
+    // Angebote + Fahrzeug-Kategorie aus Firestore laden
     const uid = auth.currentUser?.uid;
     if (!uid) return;
     getDoc(doc(db, 'fahrer', uid)).then((snap) => {
       const data = snap.data();
       if (!data) return;
+      // Fahrzeug-Kategorie bestimmen
+      const jahrgang = data.fahrzeug?.jahrgang ? parseInt(data.fahrzeug.jahrgang) : undefined;
+      const kat = fahrzeugKategorie(jahrgang);
+      setFahrerKat(kat);
+      const erlaubt = erlaubteAngebote(kat);
       if (Array.isArray(data.angebote) && data.angebote.length > 0) {
-        setAngebote(data.angebote);
-      } else if (data.tarifModus) {
-        const alt = data.tarifModus === 'eigen' ? ['eigen'] : [data.tarifModus];
-        setAngebote(alt);
+        // Nur erlaubte Angebote behalten
+        const gefiltert = data.angebote.filter((a: string) => erlaubt.includes(a));
+        setAngebote(gefiltert.length > 0 ? gefiltert : [kat]);
+      } else {
+        setAngebote([kat]);
       }
-      if (typeof data.eigenProKm === 'number') setEigenProKm(data.eigenProKm);
-    });
+      if (typeof data.freiProKm === 'number') setFreiProKm(data.freiProKm);
+      else if (typeof data.eigenProKm === 'number') setFreiProKm(data.eigenProKm);
+    }).catch((e) => console.log('Einstellungen laden Fehler (ignoriert):', e));
   }, []);
 
   const tarifSpeichern = async (neueAngebote: string[], proKm: number) => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
-    await setDoc(doc(db, 'fahrer', uid), { angebote: neueAngebote, eigenProKm: proKm }, { merge: true }).catch(() => {});
+    await setDoc(doc(db, 'fahrer', uid), { angebote: neueAngebote, freiProKm: proKm }, { merge: true }).catch(() => {});
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.inhalt}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.zurueckButton}>
-          <View style={styles.zurueckPill}>
-            <Text style={styles.zurueckText}>{t('allgemein.zurueck')}</Text>
-          </View>
+        <TouchableOpacity onPress={() => router.back()} style={styles.zurueckBtn}>
+          <Text style={styles.zurueckPfeil}>&#x2039;</Text>
         </TouchableOpacity>
         <Text style={styles.titel}>{t('einstellungen.titel')}</Text>
-        <View style={{ width: 80 }} />
+        <View style={{ width: 36 }} />
       </View>
 
       {/* Bildschirm wach halten */}
@@ -96,13 +117,22 @@ export default function FahrerEinstellungen() {
         <Text style={styles.sektionTitel}>{t('einstellungen.meinAngebot')}</Text>
         <Text style={styles.sektionSub}>{t('einstellungen.meinAngebotSub')}</Text>
 
+        {/* Kategorie-Info */}
+        <View style={styles.katInfoBox}>
+          <Text style={styles.katInfoLabel}>{t('einstellungen.deineKategorie')}</Text>
+          <Text style={styles.katInfoWert}>{TARIFE[fahrerKat].label}</Text>
+        </View>
+
         <View style={styles.checkboxContainer}>
-          {(['furtgo_x', 'furtgo_comfort'] as const).map((kat) => {
+          {(erlaubteAngebote(fahrerKat).filter(k => k !== 'frei') as Kategorie[]).map((kat) => {
             const aktiv = angebote.includes(kat);
+            const stil = kat === 'furtgo_limu' ? styles.checkboxAktivLimu
+              : kat === 'furtgo_plus' ? styles.checkboxAktivPlus
+              : styles.checkboxAktivMini;
             return (
               <TouchableOpacity
                 key={kat}
-                style={[styles.checkboxRow, aktiv && (kat === 'furtgo_x' ? styles.checkboxAktivX : styles.checkboxAktivComfort)]}
+                style={[styles.checkboxRow, aktiv && stil]}
                 onPress={() => {
                   let neueAngebote: string[];
                   if (aktiv) {
@@ -112,7 +142,7 @@ export default function FahrerEinstellungen() {
                     neueAngebote = [...angebote, kat];
                   }
                   setAngebote(neueAngebote);
-                  tarifSpeichern(neueAngebote, eigenProKm);
+                  tarifSpeichern(neueAngebote, freiProKm);
                 }}
               >
                 <Text style={styles.checkboxIcon}>{aktiv ? '☑' : '☐'}</Text>
@@ -128,51 +158,51 @@ export default function FahrerEinstellungen() {
             );
           })}
 
-          {/* Eigen-Tarif */}
+          {/* Frei wählbar */}
           {(() => {
-            const eigenAktiv = angebote.includes('eigen');
+            const freiAktiv = angebote.includes('frei');
             return (
               <TouchableOpacity
-                style={[styles.checkboxRow, eigenAktiv && styles.checkboxAktivEigen]}
+                style={[styles.checkboxRow, freiAktiv && styles.checkboxAktivFrei]}
                 onPress={() => {
                   let neueAngebote: string[];
-                  if (eigenAktiv) {
-                    neueAngebote = angebote.filter((a) => a !== 'eigen');
+                  if (freiAktiv) {
+                    neueAngebote = angebote.filter((a) => a !== 'frei');
                     if (neueAngebote.length === 0) return;
                   } else {
-                    neueAngebote = [...angebote, 'eigen'];
+                    neueAngebote = [...angebote, 'frei'];
                   }
                   setAngebote(neueAngebote);
-                  tarifSpeichern(neueAngebote, eigenProKm);
+                  tarifSpeichern(neueAngebote, freiProKm);
                 }}
               >
-                <Text style={styles.checkboxIcon}>{eigenAktiv ? '☑' : '☐'}</Text>
+                <Text style={styles.checkboxIcon}>{freiAktiv ? '☑' : '☐'}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.checkboxLabel, eigenAktiv && styles.checkboxLabelAktiv]}>
-                    {t('einstellungen.eigenTarif')}
+                  <Text style={[styles.checkboxLabel, freiAktiv && styles.checkboxLabelAktiv]}>
+                    {t('einstellungen.freiWaehlbar')}
                   </Text>
                   <Text style={styles.checkboxSub}>
-                    CHF 3.50 + {eigenProKm.toFixed(2)}/km
+                    CHF 3.50 + {freiProKm.toFixed(2)}/km
                   </Text>
                 </View>
-                {eigenAktiv && (
+                {freiAktiv && (
                   <View style={styles.eigenBtnRow}>
                     <TouchableOpacity
                       style={styles.eigenBtn}
                       onPress={() => {
-                        const neu = Math.max(1.00, Math.round((eigenProKm - 0.10) * 100) / 100);
-                        setEigenProKm(neu);
+                        const neu = Math.max(1.00, Math.round((freiProKm - 0.10) * 100) / 100);
+                        setFreiProKm(neu);
                         tarifSpeichern(angebote, neu);
                       }}
                     >
                       <Text style={styles.eigenBtnText}>-</Text>
                     </TouchableOpacity>
-                    <Text style={styles.eigenWert}>{eigenProKm.toFixed(2)}</Text>
+                    <Text style={styles.eigenWert}>{freiProKm.toFixed(2)}</Text>
                     <TouchableOpacity
                       style={styles.eigenBtn}
                       onPress={() => {
-                        const neu = Math.min(9.00, Math.round((eigenProKm + 0.10) * 100) / 100);
-                        setEigenProKm(neu);
+                        const neu = Math.min(9.00, Math.round((freiProKm + 0.10) * 100) / 100);
+                        setFreiProKm(neu);
                         tarifSpeichern(angebote, neu);
                       }}
                     >
@@ -199,16 +229,17 @@ const styles = StyleSheet.create({
     paddingTop: 36,
     marginBottom: 20,
   },
-  zurueckButton: { width: 80 },
-  zurueckPill: {
+  zurueckBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#16213e',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#333',
   },
-  zurueckText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  zurueckPfeil: { color: '#fff', fontSize: 22, fontWeight: '300', marginTop: -2 },
   titel: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
 
   sektion: {
@@ -236,9 +267,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#333',
   },
-  checkboxAktivX: { borderColor: '#FFD700', backgroundColor: '#2a2000' },
-  checkboxAktivComfort: { borderColor: '#60a5fa', backgroundColor: '#0f1a3e' },
-  checkboxAktivEigen: { borderColor: '#4ade80', backgroundColor: '#0f2d18' },
+  checkboxAktivMini: { borderColor: '#FFD700', backgroundColor: '#2a2000' },
+  checkboxAktivPlus: { borderColor: '#60a5fa', backgroundColor: '#0f1a3e' },
+  checkboxAktivLimu: { borderColor: '#a855f7', backgroundColor: '#1a0f2e' },
+  checkboxAktivFrei: { borderColor: '#4ade80', backgroundColor: '#0f2d18' },
+  katInfoBox: {
+    backgroundColor: '#0f2035',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  katInfoLabel: { color: '#aaa', fontSize: 13 },
+  katInfoWert: { color: '#FFD700', fontSize: 14, fontWeight: 'bold' },
   checkboxIcon: { fontSize: 20, color: '#fff' },
   checkboxLabel: { fontSize: 14, color: '#888', fontWeight: '600' },
   checkboxLabelAktiv: { color: '#fff' },

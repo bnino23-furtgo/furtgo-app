@@ -8,22 +8,23 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
+  TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { doc, setDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '@/constants/firebase';
 import { Ionicons } from '@expo/vector-icons';
 
-type FotoKey = 'fahrzeugausweis' | 'fuehrerscheinVorne' | 'fuehrerscheinHinten' | 'strafregister' | 'plattform';
+type FotoKey = 'fahrzeugausweis' | 'fuehrerscheinVorne' | 'fuehrerscheinHinten' | 'strafregister' | 'uidDokument';
 
 interface Fotos {
   fahrzeugausweis: string | null;
   fuehrerscheinVorne: string | null;
   fuehrerscheinHinten: string | null;
   strafregister: string | null;
-  plattform: string | null;
+  uidDokument: string | null;
 }
 
 const SCHRITTE: { key: FotoKey; nr: number; label: string; sub: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -31,7 +32,7 @@ const SCHRITTE: { key: FotoKey; nr: number; label: string; sub: string; icon: ke
   { key: 'fuehrerscheinVorne', nr: 2, label: 'Führerschein – Vorderseite',   sub: 'Name und Nummer müssen sichtbar sein',         icon: 'id-card-outline' },
   { key: 'fuehrerscheinHinten',nr: 3, label: 'Führerschein – Rückseite',     sub: 'Vollständige Rückseite fotografieren',         icon: 'id-card-outline' },
   { key: 'strafregister',      nr: 4, label: 'Strafregisterauszug',          sub: 'Offizieller Auszug, nicht älter als 3 Monate', icon: 'document-text-outline' },
-  { key: 'plattform',          nr: 5, label: 'Uber / Bolt Screenshot',       sub: 'Name und Vorname müssen sichtbar sein',        icon: 'phone-portrait-outline' },
+  { key: 'uidDokument',        nr: 5, label: 'UID-Bestätigung',             sub: 'Handelsregister- oder UID-Auszug fotografieren', icon: 'business-outline' },
 ];
 
 export default function DokumenteEinreichen() {
@@ -40,11 +41,20 @@ export default function DokumenteEinreichen() {
     fuehrerscheinVorne: null,
     fuehrerscheinHinten: null,
     strafregister: null,
-    plattform: null,
+    uidDokument: null,
   });
   const [strafregisterSauber, setStrafregisterSauber] = useState<boolean | null>(null);
   const [laden, setLaden] = useState(false);
   const [uploadFortschritt, setUploadFortschritt] = useState('');
+
+  // Fahrzeug-Daten
+  const [schildnummer, setSchildnummer] = useState('');
+  const [autoMarke, setAutoMarke] = useState('');
+  const [autoJahrgang, setAutoJahrgang] = useState('');
+  const [autoFarbe, setAutoFarbe] = useState('');
+
+  // UID-Nummer
+  const [uidNummer, setUidNummer] = useState('');
 
   const fotoMitKamera = async (key: FotoKey) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -81,12 +91,20 @@ export default function DokumenteEinreichen() {
   };
 
   const einreichen = async () => {
-    if (!fotos.fahrzeugausweis || !fotos.fuehrerscheinVorne || !fotos.fuehrerscheinHinten || !fotos.strafregister || !fotos.plattform) {
+    if (!fotos.fahrzeugausweis || !fotos.fuehrerscheinVorne || !fotos.fuehrerscheinHinten || !fotos.strafregister || !fotos.uidDokument) {
       Alert.alert('Dokumente fehlen', 'Bitte lade alle 5 Dokumente hoch.');
+      return;
+    }
+    if (!uidNummer.trim()) {
+      Alert.alert('UID-Nummer fehlt', 'Bitte gib deine UID-Nummer ein.');
       return;
     }
     if (strafregisterSauber === null) {
       Alert.alert('Angabe fehlt', 'Bitte gib an ob dein Strafregister sauber ist.');
+      return;
+    }
+    if (!schildnummer.trim() || !autoMarke.trim() || !autoJahrgang.trim() || !autoFarbe.trim()) {
+      Alert.alert('Fahrzeug-Daten fehlen', 'Bitte fülle alle Fahrzeug-Felder aus.');
       return;
     }
     const uid = auth.currentUser?.uid;
@@ -99,35 +117,76 @@ export default function DokumenteEinreichen() {
         [fotos.fuehrerscheinVorne, `dokumente/${uid}/fuehrerschein_vorne`],
         [fotos.fuehrerscheinHinten,`dokumente/${uid}/fuehrerschein_hinten`],
         [fotos.strafregister,      `dokumente/${uid}/strafregister`],
-        [fotos.plattform,          `dokumente/${uid}/plattform`],
+        [fotos.uidDokument,        `dokumente/${uid}/uid_dokument`],
       ];
-      const labels = ['Fahrzeugausweis', 'Führerschein Vorne', 'Führerschein Hinten', 'Strafregister', 'Plattform'];
+      const labels = ['Fahrzeugausweis', 'Führerschein Vorne', 'Führerschein Hinten', 'Strafregister', 'UID-Bestätigung'];
       const urls: string[] = [];
       for (let i = 0; i < uploads.length; i++) {
         setUploadFortschritt(`${labels[i]} wird hochgeladen... (${i + 1}/5)`);
         urls.push(await fotoHochladen(uploads[i][0], uploads[i][1]));
       }
       setUploadFortschritt('Wird gespeichert...');
+      const benutzer = auth.currentUser;
       await setDoc(
         doc(db, 'fahrer', uid),
         {
           verifiziert: 'ausstehend',
+          fahrerEmail: benutzer?.email ?? null,
+          fahrerName: benutzer?.displayName ?? null,
           dokumente: {
             fahrzeugausweisUrl: urls[0],
             fuehrerscheinVorneUrl: urls[1],
             fuehrerscheinHintenUrl: urls[2],
             strafregisterUrl: urls[3],
+            uidDokumentUrl: urls[4],
+            uidNummer: uidNummer.trim(),
             strafregisterSauber,
-            plattformUrl: urls[4],
             eingereichtAm: Date.now(),
+          },
+          fahrzeug: {
+            schildnummer: schildnummer.trim(),
+            marke: autoMarke.trim(),
+            jahrgang: autoJahrgang.trim(),
+            farbe: autoFarbe.trim(),
           },
         },
         { merge: true }
       );
+
+      try {
+        await addDoc(collection(db, 'mail'), {
+          to: ['support.furtgo@gmail.com'],
+          message: {
+            subject: `Neue Dokumente eingereicht — ${benutzer?.displayName ?? 'Fahrer'}`,
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+                <h2 style="margin:0 0 4px;">Furtgo</h2>
+                <p style="color:#666;margin:0 0 20px;font-size:13px;">Admin-Benachrichtigung</p>
+                <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
+                <h3 style="margin:0 0 12px;">Neue Dokumente eingereicht</h3>
+                <table style="width:100%;border-collapse:collapse;">
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Fahrer</td><td style="text-align:right;font-size:14px;">${benutzer?.displayName ?? '(kein Name)'}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">E-Mail</td><td style="text-align:right;font-size:14px;">${benutzer?.email ?? '–'}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">UID-Nummer</td><td style="text-align:right;font-size:14px;">${uidNummer.trim()}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Fahrzeug</td><td style="text-align:right;font-size:14px;">${autoMarke.trim()} (${autoJahrgang.trim()}, ${autoFarbe.trim()})</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Schildnummer</td><td style="text-align:right;font-size:14px;">${schildnummer.trim()}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Strafregister sauber</td><td style="text-align:right;font-size:14px;">${strafregisterSauber ? 'Ja' : 'Nein (Einträge vorhanden)'}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Eingereicht am</td><td style="text-align:right;font-size:14px;">${new Date().toLocaleString('de-CH')}</td></tr>
+                </table>
+                <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
+                <p style="color:#666;font-size:13px;text-align:center;">Bitte im Admin-Panel prüfen und freigeben oder ablehnen.</p>
+              </div>`,
+          },
+        });
+      } catch (mailErr) {
+        console.error('Admin-Mail Fehler (ignoriert):', mailErr);
+      }
+
       Alert.alert('Eingereicht ✓', 'Deine Dokumente wurden erfolgreich eingereicht. Du wirst nach der Prüfung freigeschaltet.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
-    } catch {
+    } catch (err) {
+      console.error('Dokumente-Upload Fehler:', err);
       Alert.alert('Fehler', 'Upload fehlgeschlagen. Bitte versuche es erneut.');
     } finally {
       setLaden(false);
@@ -143,8 +202,7 @@ export default function DokumenteEinreichen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.zurueckBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={20} color="#FFD700" />
-          <Text style={styles.zurueckText}>Zurück</Text>
+          <Text style={styles.zurueckPfeil}>&#x2039;</Text>
         </TouchableOpacity>
         <View style={styles.headerTitel}>
           <Ionicons name="shield-checkmark-outline" size={32} color="#FFD700" />
@@ -231,6 +289,82 @@ export default function DokumenteEinreichen() {
         </View>
       </View>
 
+      {/* UID-Nummer */}
+      <View style={styles.karte}>
+        <View style={styles.karteHeader}>
+          <View style={[styles.nrBadge, uidNummer.trim() ? styles.nrBadgeErledigt : {}]}>
+            {uidNummer.trim()
+              ? <Ionicons name="checkmark" size={16} color="#000" />
+              : <Text style={styles.nrText}>7</Text>
+            }
+          </View>
+          <View style={styles.karteInfo}>
+            <Text style={styles.karteLabel}>UID-Nummer</Text>
+            <Text style={styles.karteSub}>Unternehmens-Identifikationsnummer (z.B. CHE-123.456.789)</Text>
+          </View>
+          <Ionicons name="business-outline" size={22} color={uidNummer.trim() ? '#4ade80' : '#444'} />
+        </View>
+        <TextInput
+          style={styles.fahrzeugInput}
+          placeholder="CHE-123.456.789"
+          placeholderTextColor="#555"
+          value={uidNummer}
+          onChangeText={setUidNummer}
+          autoCapitalize="characters"
+        />
+      </View>
+
+      {/* Fahrzeug-Daten */}
+      <View style={styles.karte}>
+        <View style={styles.karteHeader}>
+          <View style={[styles.nrBadge, (schildnummer && autoMarke && autoJahrgang && autoFarbe) ? styles.nrBadgeErledigt : {}]}>
+            {(schildnummer && autoMarke && autoJahrgang && autoFarbe)
+              ? <Ionicons name="checkmark" size={16} color="#000" />
+              : <Text style={styles.nrText}>8</Text>
+            }
+          </View>
+          <View style={styles.karteInfo}>
+            <Text style={styles.karteLabel}>Fahrzeug-Daten</Text>
+            <Text style={styles.karteSub}>Damit der Fahrgast dein Auto erkennt</Text>
+          </View>
+          <Ionicons name="car-sport-outline" size={22} color={(schildnummer && autoMarke && autoJahrgang && autoFarbe) ? '#4ade80' : '#444'} />
+        </View>
+        <View style={styles.fahrzeugFelder}>
+          <TextInput
+            style={styles.fahrzeugInput}
+            placeholder="Schildnummer (z.B. ZH 123456)"
+            placeholderTextColor="#555"
+            value={schildnummer}
+            onChangeText={setSchildnummer}
+            autoCapitalize="characters"
+          />
+          <TextInput
+            style={styles.fahrzeugInput}
+            placeholder="Marke + Modell (z.B. Toyota Camry)"
+            placeholderTextColor="#555"
+            value={autoMarke}
+            onChangeText={setAutoMarke}
+          />
+          <View style={styles.fahrzeugRow}>
+            <TextInput
+              style={[styles.fahrzeugInput, { flex: 1 }]}
+              placeholder="Jahrgang (z.B. 2020)"
+              placeholderTextColor="#555"
+              value={autoJahrgang}
+              onChangeText={setAutoJahrgang}
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={[styles.fahrzeugInput, { flex: 1 }]}
+              placeholder="Farbe (z.B. Schwarz)"
+              placeholderTextColor="#555"
+              value={autoFarbe}
+              onChangeText={setAutoFarbe}
+            />
+          </View>
+        </View>
+      </View>
+
       {/* Hinweis */}
       <View style={styles.hinweisBox}>
         <Ionicons name="information-circle-outline" size={18} color="#aaa" />
@@ -277,8 +411,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#ffffff10',
   },
-  zurueckBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 20 },
-  zurueckText: { color: '#FFD700', fontSize: 14 },
+  zurueckBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#16213e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+    marginBottom: 20,
+  },
+  zurueckPfeil: { color: '#fff', fontSize: 22, fontWeight: '300', marginTop: -2 },
   headerTitel: { alignItems: 'center', marginBottom: 20 },
   titel: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginTop: 10, marginBottom: 6 },
   sub: { fontSize: 13, color: '#888', textAlign: 'center', lineHeight: 18 },
@@ -343,6 +487,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff08', borderRadius: 10, padding: 12,
   },
   uploadText: { color: '#aaa', fontSize: 12 },
+
+  fahrzeugFelder: { gap: 10 },
+  fahrzeugInput: {
+    backgroundColor: '#ffffff08',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFD70030',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#fff',
+  },
+  fahrzeugRow: { flexDirection: 'row', gap: 10 },
 
   einreichenBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

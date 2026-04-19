@@ -72,6 +72,7 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort }: Prop
         mapRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateMarkers = (L: any) => {
@@ -141,6 +142,7 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort }: Prop
   useEffect(() => {
     if (!mapRef.current) return;
     import('leaflet').then((leaflet) => updateMarkers(leaflet.default));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [standort, zielOrt, fahrerStandort]);
 
   return (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Linking,
 } from 'react-native';
 import { router } from 'expo-router';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/constants/firebase';
 
 const ADMIN_PIN = '1234';
@@ -20,6 +20,8 @@ const ADMIN_PIN = '1234';
 interface FahrerDaten {
   id: string;
   name?: string;
+  fahrerEmail?: string | null;
+  fahrerName?: string | null;
   verifiziert?: string;
   gesperrt?: boolean;
   aboGueltigBis?: number;
@@ -56,6 +58,8 @@ export default function AdminPanel() {
       const snap = await getDocs(collection(db, 'fahrer'));
       const liste: FahrerDaten[] = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FahrerDaten));
       setFahrer(liste);
+    } catch (e) {
+      console.log('Admin Fahrer laden Fehler (ignoriert):', e);
     } finally {
       setLaden(false);
     }
@@ -66,12 +70,93 @@ export default function AdminPanel() {
     setFahrer((prev) =>
       prev.map((f) => (f.id === fahrerId ? { ...f, verifiziert: status } : f))
     );
+
+    const f = fahrer.find((x) => x.id === fahrerId);
+    if (f?.fahrerEmail && (status === 'genehmigt' || status === 'abgelehnt')) {
+      try {
+        const anrede = f.fahrerName ?? f.name ?? 'Fahrer';
+        const istGenehmigt = status === 'genehmigt';
+        const betreff = istGenehmigt
+          ? 'Furtgo — Du bist freigeschaltet ✓'
+          : 'Furtgo — Deine Dokumente wurden abgelehnt';
+        const html = istGenehmigt
+          ? `
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+              <h2 style="margin:0 0 4px;">Furtgo</h2>
+              <p style="color:#666;margin:0 0 20px;font-size:13px;">Verifikations-Bestätigung</p>
+              <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
+              <h3 style="margin:0 0 12px;color:#16a34a;">Willkommen an Bord, ${anrede}!</h3>
+              <p style="font-size:14px;line-height:1.6;">Deine Dokumente wurden geprüft und freigegeben. Du kannst jetzt online gehen und Fahrten annehmen.</p>
+              <p style="font-size:14px;line-height:1.6;"><b>Nächster Schritt:</b> Abo aktivieren (CHF 60/Monat), dann im Fahrer-Dashboard den Online-Schalter umlegen.</p>
+              <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
+              <p style="color:#666;font-size:12px;text-align:center;">Bei Fragen: support.furtgo@gmail.com</p>
+            </div>`
+          : `
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+              <h2 style="margin:0 0 4px;">Furtgo</h2>
+              <p style="color:#666;margin:0 0 20px;font-size:13px;">Dokumenten-Prüfung</p>
+              <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
+              <h3 style="margin:0 0 12px;color:#dc2626;">Hallo ${anrede},</h3>
+              <p style="font-size:14px;line-height:1.6;">Leider konnten wir deine eingereichten Dokumente nicht freigeben.</p>
+              <p style="font-size:14px;line-height:1.6;">Du kannst die Unterlagen jederzeit neu einreichen. Öffne dazu die Furtgo-App → Profil → Verifikation.</p>
+              <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
+              <p style="color:#666;font-size:12px;text-align:center;">Bei Fragen: support.furtgo@gmail.com</p>
+            </div>`;
+
+        await addDoc(collection(db, 'mail'), {
+          to: [f.fahrerEmail],
+          message: { subject: betreff, html },
+        });
+      } catch (mailErr) {
+        console.error('Fahrer-Mail Fehler (ignoriert):', mailErr);
+      }
+    }
   };
 
   const gesperrtSetzen = async (fahrerId: string, wert: boolean) => {
     await updateDoc(doc(db, 'fahrer', fahrerId), { gesperrt: wert });
     setFahrer((prev) =>
       prev.map((f) => (f.id === fahrerId ? { ...f, gesperrt: wert } : f))
+    );
+  };
+
+  const alleAbgelehntenLoeschen = () => {
+    const abgelehnte = fahrer.filter((f) => f.verifiziert === 'abgelehnt');
+    if (abgelehnte.length === 0) {
+      Alert.alert('Keine abgelehnten', 'Es gibt keine abgelehnten Fahrer zum Löschen.');
+      return;
+    }
+    Alert.alert(
+      `${abgelehnte.length} Fahrer löschen?`,
+      `Alle abgelehnten Fahrer-Dokumente werden unwiderruflich gelöscht. Auth-Accounts müssen manuell in der Firebase Console gelöscht werden.`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Löschen',
+          style: 'destructive',
+          onPress: async () => {
+            setLaden(true);
+            let erfolg = 0;
+            let fehler = 0;
+            for (const f of abgelehnte) {
+              try {
+                await deleteDoc(doc(db, 'fahrer', f.id));
+                try { await deleteDoc(doc(db, 'nutzer', f.id)); } catch { /* nutzer-Doc evtl. nicht vorhanden */ }
+                erfolg++;
+              } catch (e) {
+                console.log('Löschen Fehler:', f.id, e);
+                fehler++;
+              }
+            }
+            setFahrer((prev) => prev.filter((f) => f.verifiziert !== 'abgelehnt'));
+            setLaden(false);
+            Alert.alert(
+              'Fertig',
+              `${erfolg} gelöscht, ${fehler} Fehler.\n\nAuth-Accounts + Ausweis-Fotos: Firebase Console manuell aufräumen.`
+            );
+          },
+        },
+      ]
     );
   };
 
@@ -88,8 +173,8 @@ export default function AdminPanel() {
   if (!freigegeben) {
     return (
       <View style={styles.pinContainer}>
-        <TouchableOpacity style={styles.zurueck} onPress={() => router.back()}>
-          <Text style={styles.zurueckText}>← Zurück</Text>
+        <TouchableOpacity style={styles.zurueckBtn} onPress={() => router.back()}>
+          <Text style={styles.zurueckPfeil}>&#x2039;</Text>
         </TouchableOpacity>
         <Text style={styles.pinTitel}>Admin-Bereich</Text>
         <Text style={styles.pinSub}>PIN eingeben</Text>
@@ -113,8 +198,8 @@ export default function AdminPanel() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.inhalt}>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.zurueckText}>← Zurück</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.zurueckBtnInline}>
+          <Text style={styles.zurueckPfeil}>&#x2039;</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={fahrerLaden}>
           <Text style={styles.refreshText}>↻ Aktualisieren</Text>
@@ -123,6 +208,10 @@ export default function AdminPanel() {
 
       <Text style={styles.titel}>Admin-Panel</Text>
       <Text style={styles.sub}>{fahrer.length} Fahrer registriert</Text>
+
+      <TouchableOpacity style={styles.loeschenAlleBtn} onPress={alleAbgelehntenLoeschen}>
+        <Text style={styles.loeschenAlleText}>🗑  Alle abgelehnten löschen</Text>
+      </TouchableOpacity>
 
       {laden && <ActivityIndicator color="#FFD700" style={{ marginTop: 20 }} />}
 
@@ -248,8 +337,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
   },
-  zurueck: { position: 'absolute', top: 50, left: 24 },
-  zurueckText: { color: '#FFD700', fontSize: 15 },
+  zurueckBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#16213e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+    position: 'absolute',
+    top: 50,
+    left: 24,
+  },
+  zurueckBtnInline: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#16213e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  zurueckPfeil: { color: '#fff', fontSize: 22, fontWeight: '300', marginTop: -2 },
   pinTitel: { fontSize: 28, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 8 },
   pinSub: { fontSize: 14, color: '#aaa', textAlign: 'center', marginBottom: 24 },
   pinInput: {
@@ -331,5 +442,15 @@ const styles = StyleSheet.create({
   btnGrau: { backgroundColor: '#333', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
   btnGelb: { backgroundColor: '#FFD700', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
   btnRot: { backgroundColor: '#7f1d1d', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
+  loeschenAlleBtn: {
+    backgroundColor: '#7f1d1d',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  loeschenAlleText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   btnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 });

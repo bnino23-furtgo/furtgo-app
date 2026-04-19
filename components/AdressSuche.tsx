@@ -38,7 +38,7 @@ export default function AdressSuche({ placeholder = 'Wohin?', onAuswahl, initial
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(text)}&format=json&limit=5&accept-language=de&countrycodes=ch,de,at,fr,it,li&addressdetails=1`,
-        { headers: { Accept: 'application/json', 'User-Agent': 'MeineUberApp/1.0' } }
+        { headers: { Accept: 'application/json', 'User-Agent': 'Furtgo/1.0' } }
       );
       const data = await res.json();
       setVorschlaege(

@@ -25,7 +25,7 @@ import {
 import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import { useTranslation } from 'react-i18next';
-import { supportedLanguages, changeLanguage } from '@/i18n';
+import { supportedLanguages, driverLanguages, changeLanguage } from '@/i18n';
 
 const SUMUP_LINK = 'https://pay.sumup.com/b2c/X8YC4RF074';
 const LEGAL_URL = 'https://bnino23-furtgo.github.io/furtgo-legal';
@@ -112,11 +112,14 @@ export default function ProfilScreen() {
           query(collection(db, 'fahrten'), where('fahrgastId', '==', uid), where('status', '==', 'abgeschlossen'))
         );
         setAnzahlFahrtenAlsFahrgast(fahrgastFahrtenSnap.size);
+      } catch (e) {
+        console.log('Profil laden Fehler (ignoriert):', e);
       } finally {
         setDatenladen(false);
       }
     };
     laden();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const profilSpeichern = async () => {
@@ -245,13 +248,11 @@ export default function ProfilScreen() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={styles.container} contentContainerStyle={styles.inhalt}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.zurueckButton}>
-            <View style={styles.zurueckPill}>
-              <Text style={styles.zurueckText}>{t('allgemein.zurueck')}</Text>
-            </View>
+          <TouchableOpacity onPress={() => router.back()} style={styles.zurueckBtn}>
+            <Text style={styles.zurueckPfeil}>&#x2039;</Text>
           </TouchableOpacity>
           <Text style={styles.titel}>{t('profil.titel')}</Text>
-          <View style={{ width: 70 }} />
+          <View style={{ width: 36 }} />
         </View>
 
         <View style={styles.avatar}>
@@ -292,9 +293,13 @@ export default function ProfilScreen() {
                 <Text style={styles.verifikationBadgeText}>{t('profil.verifiziert')}</Text>
               </View>
             ) : verifiziert === 'ausstehend' ? (
-              <View style={[styles.verifikationBadge, { backgroundColor: '#2a2000', borderColor: '#FFD700' }]}>
+              <TouchableOpacity
+                style={[styles.verifikationBadge, { backgroundColor: '#2a2000', borderColor: '#FFD700' }]}
+                onPress={() => router.push('/fahrer/dokumente' as any)}
+              >
                 <Text style={[styles.verifikationBadgeText, { color: '#FFD700' }]}>{t('profil.dokumenteGeprueft')}</Text>
-              </View>
+                <Text style={[styles.verifikationBtnSub, { color: '#FFD700' }]}>{t('profil.dokumenteNeu')}</Text>
+              </TouchableOpacity>
             ) : verifiziert === 'abgelehnt' ? (
               <TouchableOpacity
                 style={[styles.verifikationBtn, { borderColor: '#f87171', backgroundColor: '#2a0000' }]}
@@ -548,7 +553,7 @@ export default function ProfilScreen() {
           <View style={[styles.modalKarte, { maxHeight: '70%' }]}>
             <Text style={styles.modalTitel}>🌐 {t('allgemein.sprache')}</Text>
             <ScrollView style={{ marginBottom: 10 }}>
-              {supportedLanguages.map((lang) => (
+              {(istFahrerRolle ? driverLanguages : supportedLanguages).map((lang) => (
                 <TouchableOpacity
                   key={lang.code}
                   style={{
@@ -560,7 +565,7 @@ export default function ProfilScreen() {
                     borderColor: '#FFD700',
                   }}
                   onPress={() => {
-                    changeLanguage(lang.code);
+                    changeLanguage(lang.code, istFahrerRolle ? 'fahrer' : 'fahrgast');
                     setSprachModal(false);
                   }}
                 >
@@ -598,16 +603,17 @@ const styles = StyleSheet.create({
     paddingTop: 36,
     marginBottom: 20,
   },
-  zurueckButton: { width: 80 },
-  zurueckPill: {
+  zurueckBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#16213e',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#333',
   },
-  zurueckText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  zurueckPfeil: { color: '#fff', fontSize: 22, fontWeight: '300', marginTop: -2 },
   titel: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
   avatar: {
     width: 60,

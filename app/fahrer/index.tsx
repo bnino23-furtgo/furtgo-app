@@ -7,6 +7,9 @@ import {
   StyleSheet,
   Modal,
   Alert,
+  Platform,
+  Linking,
+  Switch,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
@@ -27,20 +30,20 @@ import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { KoordType } from '@/types';
 import MapComponent from '@/components/MapComponent';
 import { spieleTon } from '@/utils/ton';
-import { formatDistanz, berechneKm } from '@/utils/distanz';
-import { Platform, Linking } from 'react-native';
+import { formatDistanz } from '@/utils/distanz';
 import Constants from 'expo-constants';
-import { Switch } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+import { applyLanguageForRole } from '@/i18n';
 
 const SUMUP_LINK = 'https://pay.sumup.com/b2c/X8YC4RF074';
 
-type Kategorie = 'furtgo_x' | 'furtgo_comfort';
+type Kategorie = 'furtgo_mini' | 'furtgo_plus' | 'furtgo_limu';
 const TARIFE: Record<Kategorie, { grundpreis: number; proKm: number; label: string }> = {
-  furtgo_x: { grundpreis: 3.50, proKm: 2.20, label: 'Furtgo X' },
-  furtgo_comfort: { grundpreis: 5.00, proKm: 2.80, label: 'Furtgo Comfort' },
+  furtgo_mini: { grundpreis: 3.50, proKm: 2.20, label: 'Furtgo Mini' },
+  furtgo_plus: { grundpreis: 5.00, proKm: 2.80, label: 'Furtgo Plus' },
+  furtgo_limu: { grundpreis: 8.00, proKm: 6.00, label: 'Furtgo Limu' },
 };
 
 // expo-notifications funktioniert nicht in Expo Go ab SDK 53
@@ -48,6 +51,7 @@ const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
 let Notifications: typeof import('expo-notifications') | null = null;
 if (!isExpoGo) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   Notifications = require('expo-notifications');
   Notifications!.setNotificationHandler({
     handleNotification: async () => ({
@@ -58,6 +62,15 @@ if (!isExpoGo) {
       shouldShowList: true,
     }),
   });
+  // Android Notification Channel mit HIGH Priorität → Heads-Up Banner
+  if (Platform.OS === 'android') {
+    Notifications!.setNotificationChannelAsync('fahrtanfragen', {
+      name: 'Fahrtanfragen',
+      importance: Notifications!.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      sound: 'default',
+    });
+  }
 }
 
 export default function FahrerDashboard() {
@@ -70,8 +83,11 @@ export default function FahrerDashboard() {
   const [anfrage, setAnfrage] = useState<any>(null);
   const [modalSichtbar, setModalSichtbar] = useState(false);
   const [verifiziert, setVerifiziert] = useState<string | null>(null);
+  const [aboGueltigBis, setAboGueltigBis] = useState<number | null>(null);
   const [aboAbgelaufen, setAboAbgelaufen] = useState(false);
   const [abmeldenModalSichtbar, setAbmeldenModalSichtbar] = useState(false);
+  const [menuOffen, setMenuOffen] = useState(false);
+  const [onboardingSichtbar, setOnboardingSichtbar] = useState(false);
   // Bildschirm-Einstellung beim Start laden
   useEffect(() => {
     AsyncStorage.getItem('bildschirmWach').then((wert) => {
@@ -80,6 +96,11 @@ export default function FahrerDashboard() {
       }
     });
     return () => { deactivateKeepAwake(); };
+  }, []);
+
+  // Fahrer-Sprache laden
+  useEffect(() => {
+    applyLanguageForRole('fahrer');
   }, []);
 
   const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -100,7 +121,8 @@ export default function FahrerDashboard() {
         const summe = bewertet.reduce((acc, d) => acc + (d.data().bewertung ?? 0), 0);
         const durchschnitt = Math.round((summe / bewertet.length) * 10) / 10;
         await setDoc(doc(db, 'fahrer', uid), { bewertungsDurchschnitt: durchschnitt }, { merge: true });
-      });
+      })
+      .catch((e) => console.log('Bewertung laden Fehler (ignoriert):', e));
   }, []);
 
   // Push-Berechtigung anfragen
@@ -131,8 +153,16 @@ export default function FahrerDashboard() {
           setNameFestgelegt(true);
         }
         if (data?.verifiziert) setVerifiziert(data.verifiziert);
-        if (data?.aboGueltigBis && data.aboGueltigBis < Date.now()) setAboAbgelaufen(true);
-        if (data?.online) {
+        if (data?.aboGueltigBis) {
+          setAboGueltigBis(data.aboGueltigBis);
+          if (data.aboGueltigBis < Date.now()) setAboAbgelaufen(true);
+        }
+        if (!data?.onboardingGesehen) setOnboardingSichtbar(true);
+        const darfOnlineBeimLaden =
+          data?.verifiziert === 'genehmigt' &&
+          typeof data?.aboGueltigBis === 'number' &&
+          data.aboGueltigBis > Date.now();
+        if (data?.online && darfOnlineBeimLaden) {
           setOnline(true);
           const fRef = doc(db, 'fahrer', uid);
           // lastSeen sofort aktualisieren, damit Fahrgast den Fahrer nicht als Geist filtert
@@ -140,14 +170,18 @@ export default function FahrerDashboard() {
             if (loc) updateDoc(fRef, { standort: loc, lastSeen: Date.now() }).catch(() => {});
           });
           starteOnlineBetrieb(fRef);
+        } else if (data?.online && !darfOnlineBeimLaden) {
+          // Altlast: online=true in DB, aber Voraussetzungen fehlen → zurücksetzen
+          updateDoc(doc(db, 'fahrer', uid), { online: false }).catch(() => {});
         }
-      });
+      }).catch((e) => console.log('Fahrer laden Fehler (ignoriert):', e));
     });
     return () => {
       unsubAuth();
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
       if (listenUnsubRef.current) listenUnsubRef.current();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const sosAnrufen = () => {
@@ -173,8 +207,13 @@ export default function FahrerDashboard() {
   const starteOnlineBetrieb = (ref: any) => {
     if (locationIntervalRef.current) return; // läuft bereits
     locationIntervalRef.current = setInterval(async () => {
-      const loc = await standortAktualisieren();
-      if (loc) await updateDoc(ref, { standort: loc, lastSeen: Date.now() });
+      try {
+        if (!auth.currentUser) return;
+        const loc = await standortAktualisieren();
+        if (loc) await updateDoc(ref, { standort: loc, lastSeen: Date.now() });
+      } catch (e) {
+        console.log('Standort-Update Fehler (ignoriert):', e);
+      }
     }, 10000);
 
     const uid = auth.currentUser?.uid;
@@ -198,7 +237,9 @@ export default function FahrerDashboard() {
                 content: {
                   title: '🔔 Neue Fahrtanfrage!',
                   body: `Ziel: ${d.data().zielort?.adresse ?? 'Unbekannt'}`,
-                },
+                  ...(Platform.OS === 'android' ? { channelId: 'fahrtanfragen' } : {}),
+                  priority: 'high',
+                } as any,
                 trigger: null,
               });
             }
@@ -243,7 +284,28 @@ export default function FahrerDashboard() {
     setModalSichtbar(false);
   };
 
+  const onboardingAbschliessen = async () => {
+    setOnboardingSichtbar(false);
+    const ref = fahrerRef();
+    if (ref) {
+      try {
+        await setDoc(ref, { onboardingGesehen: true }, { merge: true });
+      } catch (e) {
+        console.log('Onboarding speichern Fehler (ignoriert):', e);
+      }
+    }
+  };
+
+  const dokumenteOk = verifiziert !== null && verifiziert !== 'abgelehnt';
+  const verifiziertOk = verifiziert === 'genehmigt';
+  const aboOk = aboGueltigBis !== null && aboGueltigBis > Date.now();
+  const darfOnline = verifiziertOk && aboOk;
+
   const onlineSchalten = async (wert: boolean) => {
+    if (wert && !darfOnline) {
+      Alert.alert(t('fahrer.nichtBereitTitel'), t('fahrer.nichtBereitText'));
+      return;
+    }
     const ref = fahrerRef();
     if (!ref) return;
 
@@ -390,26 +452,75 @@ export default function FahrerDashboard() {
           <Text style={styles.willkommen} numberOfLines={1}>{t('fahrer.hallo', { name })}</Text>
           <Text style={styles.headerSub}>{t('fahrer.dashboard')}</Text>
         </View>
-        <View style={styles.headerRechts}>
-          <TouchableOpacity onPress={() => router.push('/verlauf?rolle=fahrer' as any)}>
-            <Text style={styles.headerBtn}>📋</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/profil?rolle=fahrer' as any)}>
-            <Text style={styles.headerBtn}>👤</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/fahrer/einstellungen' as any)}>
-            <Text style={styles.headerBtn}>⚙️</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setAbmeldenModalSichtbar(true)}>
-            <Text style={styles.abmeldenText}>⎋</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.menuBtn} onPress={() => setMenuOffen(!menuOffen)}>
+          <Text style={styles.menuIcon}>☰</Text>
+        </TouchableOpacity>
       </View>
 
+      {menuOffen && (
+        <View style={styles.menuDropdown}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOffen(false); router.push('/profil?rolle=fahrer' as any); }}>
+            <Text style={styles.menuItemIcon}>👤</Text>
+            <Text style={styles.menuItemText}>{t('profil.titel')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOffen(false); router.push('/verlauf?rolle=fahrer' as any); }}>
+            <Text style={styles.menuItemIcon}>📋</Text>
+            <Text style={styles.menuItemText}>{t('verlauf.titel')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOffen(false); router.push('/fahrer/einstellungen' as any); }}>
+            <Text style={styles.menuItemIcon}>⚙️</Text>
+            <Text style={styles.menuItemText}>{t('einstellungen.titel')}</Text>
+          </TouchableOpacity>
+          <View style={styles.menuTrenner} />
+          <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOffen(false); setAbmeldenModalSichtbar(true); }}>
+            <Text style={styles.menuItemIcon}>⎋</Text>
+            <Text style={[styles.menuItemText, { color: '#f87171' }]}>{t('fahrer.abmelden')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.card}>
+        {!darfOnline && (
+          <View style={styles.checklistBox}>
+            <Text style={styles.checklistTitel}>{t('fahrer.nichtBereitTitel')}</Text>
+            <View style={styles.checklistItem}>
+              <Text style={styles.checklistIcon}>{dokumenteOk ? '✅' : '⚪'}</Text>
+              <Text style={styles.checklistText}>{t('fahrer.schrittDokumente')}</Text>
+            </View>
+            <View style={styles.checklistItem}>
+              <Text style={styles.checklistIcon}>
+                {verifiziert === 'genehmigt' ? '✅' : verifiziert === 'abgelehnt' ? '❌' : '⚪'}
+              </Text>
+              <Text style={styles.checklistText}>{t('fahrer.schrittVerifikation')}</Text>
+            </View>
+            <View style={styles.checklistItem}>
+              <Text style={styles.checklistIcon}>{aboOk ? '✅' : '⚪'}</Text>
+              <Text style={styles.checklistText}>{t('fahrer.schrittAbo')}</Text>
+            </View>
+            <View style={styles.checklistAktionen}>
+              {!dokumenteOk && (
+                <TouchableOpacity
+                  style={styles.checklistBtn}
+                  onPress={() => router.push('/fahrer/dokumente' as any)}
+                >
+                  <Text style={styles.checklistBtnText}>{t('fahrer.dokumenteHochladen')}</Text>
+                </TouchableOpacity>
+              )}
+              {!aboOk && (
+                <TouchableOpacity
+                  style={styles.checklistBtn}
+                  onPress={() => Linking.openURL(SUMUP_LINK)}
+                >
+                  <Text style={styles.checklistBtnText}>{t('fahrer.aboBezahlen')}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* Status + Switch */}
         <View style={styles.onlineRow}>
-          <Text style={[styles.onlineStatus, online ? styles.statusAn : styles.statusAus]}>
+          <Text style={[styles.onlineStatus, online ? styles.statusAn : styles.statusAus, !darfOnline && styles.statusGesperrt]}>
             {online ? t('fahrer.online') : t('fahrer.offline')}
           </Text>
           <Switch
@@ -417,6 +528,7 @@ export default function FahrerDashboard() {
             onValueChange={onlineSchalten}
             trackColor={{ false: '#444', true: '#FFD700' }}
             thumbColor="#fff"
+            disabled={!darfOnline}
           />
         </View>
 
@@ -434,6 +546,42 @@ export default function FahrerDashboard() {
         <Text style={styles.sosBtnText}>🆘</Text>
         <Text style={styles.sosBtnLabel}>SOS</Text>
       </TouchableOpacity>
+
+      {/* Willkommens-/Onboarding-Modal */}
+      <Modal visible={onboardingSichtbar} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.onboardingCard}>
+            <Text style={styles.onboardingTitel}>{t('fahrer.willkommenTitel')}</Text>
+            <Text style={styles.onboardingSub}>{t('fahrer.willkommenSub')}</Text>
+
+            <View style={styles.onboardingSchritt}>
+              <Text style={styles.onboardingNr}>1</Text>
+              <View style={styles.onboardingTextBox}>
+                <Text style={styles.onboardingSchrittTitel}>{t('fahrer.willkommenSchritt1')}</Text>
+                <Text style={styles.onboardingSchrittSub}>{t('fahrer.willkommenSchritt1Sub')}</Text>
+              </View>
+            </View>
+            <View style={styles.onboardingSchritt}>
+              <Text style={styles.onboardingNr}>2</Text>
+              <View style={styles.onboardingTextBox}>
+                <Text style={styles.onboardingSchrittTitel}>{t('fahrer.willkommenSchritt2')}</Text>
+                <Text style={styles.onboardingSchrittSub}>{t('fahrer.willkommenSchritt2Sub')}</Text>
+              </View>
+            </View>
+            <View style={styles.onboardingSchritt}>
+              <Text style={styles.onboardingNr}>3</Text>
+              <View style={styles.onboardingTextBox}>
+                <Text style={styles.onboardingSchrittTitel}>{t('fahrer.willkommenSchritt3')}</Text>
+                <Text style={styles.onboardingSchrittSub}>{t('fahrer.willkommenSchritt3Sub')}</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.onboardingBtn} onPress={onboardingAbschliessen}>
+              <Text style={styles.onboardingBtnText}>{t('fahrer.losGehts')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Abmelden-Modal */}
       <Modal visible={abmeldenModalSichtbar} transparent animationType="fade">
@@ -469,13 +617,14 @@ export default function FahrerDashboard() {
                 {/* Kategorie-Badge */}
                 <View style={[
                   styles.modalKategorieBadge,
-                  anfrage.kategorie === 'furtgo_comfort' ? styles.modalBadgeComfort
-                    : anfrage.kategorie === 'eigen' ? styles.modalBadgeEigen
-                    : styles.modalBadgeX,
+                  anfrage.kategorie === 'furtgo_plus' ? styles.modalBadgePlus
+                    : anfrage.kategorie === 'furtgo_limu' ? styles.modalBadgeLimu
+                    : anfrage.kategorie === 'frei' ? styles.modalBadgeFrei
+                    : styles.modalBadgeMini,
                 ]}>
                   <Text style={styles.modalKategorieBadgeText}>
-                    {anfrage.kategorie === 'eigen' ? t('tarife.eigenTarif')
-                      : TARIFE[anfrage.kategorie as Kategorie]?.label ?? t('tarife.furtgoX')}
+                    {anfrage.kategorie === 'frei' ? t('tarife.frei')
+                      : TARIFE[anfrage.kategorie as Kategorie]?.label ?? t('tarife.furtgoMini')}
                   </Text>
                   <Text style={styles.modalKategoriePreis}>
                     CHF {(anfrage.preis ?? 0).toFixed(2)}
@@ -568,12 +717,12 @@ const styles = StyleSheet.create({
   },
   weiterButton: {
     backgroundColor: '#FFD700',
-    borderRadius: 12,
-    padding: 13,
+    borderRadius: 10,
+    padding: 10,
     alignItems: 'center',
   },
   disabled: { opacity: 0.4 },
-  weiterText: { fontSize: 14, fontWeight: 'bold', color: '#000' },
+  weiterText: { fontSize: 12, fontWeight: 'bold', color: '#000' },
 
   container: { flex: 1, backgroundColor: '#1a1a2e', padding: 12, paddingTop: 36 },
   header: {
@@ -585,10 +734,35 @@ const styles = StyleSheet.create({
   headerLinks: { flex: 1, marginRight: 10 },
   willkommen: { fontSize: 14, fontWeight: 'bold', color: '#fff' },
   headerSub: { fontSize: 10, color: '#aaa', marginTop: 1 },
-  headerRechts: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 0 },
-  headerBtn: { fontSize: 18 },
-  verlaufText: { fontSize: 12, color: '#FFD700' },
-  abmeldenText: { fontSize: 18, color: '#aaa' },
+  menuBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#16213e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  menuIcon: { fontSize: 20, color: '#fff' },
+  menuDropdown: {
+    backgroundColor: '#16213e',
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#333',
+    overflow: 'hidden',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  menuItemIcon: { fontSize: 18 },
+  menuItemText: { fontSize: 14, color: '#fff', fontWeight: '500' },
+  menuTrenner: { height: 1, backgroundColor: '#333', marginHorizontal: 16 },
 
   card: {
     backgroundColor: '#16213e',
@@ -598,6 +772,46 @@ const styles = StyleSheet.create({
   },
   onlineRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 },
   onlineStatus: { fontSize: 13, fontWeight: 'bold' },
+  statusGesperrt: { opacity: 0.4 },
+  checklistBox: {
+    backgroundColor: '#2a2000',
+    borderColor: '#FFD700',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  checklistTitel: {
+    color: '#FFD700',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  checklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 8,
+  },
+  checklistIcon: { fontSize: 14, width: 20, textAlign: 'center' },
+  checklistText: { color: '#fff', fontSize: 12, flex: 1 },
+  checklistAktionen: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    flexWrap: 'wrap',
+  },
+  checklistBtn: {
+    flex: 1,
+    minWidth: 120,
+    backgroundColor: '#FFD700',
+    borderRadius: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  checklistBtnText: { color: '#000', fontSize: 11, fontWeight: '700' },
   statusAn: { color: '#4ade80' },
   statusAus: { color: '#f87171' },
   warteText: { color: '#aaa', textAlign: 'center', fontSize: 11, marginBottom: 4 },
@@ -606,9 +820,9 @@ const styles = StyleSheet.create({
     bottom: 28,
     right: 14,
     backgroundColor: '#e53e3e',
-    borderRadius: 28,
-    width: 52,
-    height: 52,
+    borderRadius: 22,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -631,9 +845,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 12,
   },
-  modalBadgeX: { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#FFD700' },
-  modalBadgeComfort: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#60a5fa' },
-  modalBadgeEigen: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#4ade80' },
+  modalBadgeMini: { backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#FFD700' },
+  modalBadgePlus: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#60a5fa' },
+  modalBadgeLimu: { backgroundColor: '#fdf2f8', borderWidth: 1, borderColor: '#a855f7' },
+  modalBadgeFrei: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#4ade80' },
   modalKategorieBadgeText: { fontSize: 14, fontWeight: 'bold', color: '#111' },
   modalKategoriePreis: { fontSize: 16, fontWeight: 'bold', color: '#111' },
 
@@ -656,6 +871,73 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.75)',
     justifyContent: 'flex-end',
+  },
+  onboardingCard: {
+    backgroundColor: '#1a1a2e',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 28,
+    paddingBottom: 44,
+  },
+  onboardingTitel: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  onboardingSub: {
+    fontSize: 14,
+    color: '#aaa',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  onboardingSchritt: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+    marginBottom: 16,
+    backgroundColor: '#16213e',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#ffffff15',
+  },
+  onboardingNr: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FFD700',
+    color: '#000',
+    fontSize: 15,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    lineHeight: 30,
+    overflow: 'hidden',
+  },
+  onboardingTextBox: { flex: 1 },
+  onboardingSchrittTitel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 3,
+  },
+  onboardingSchrittSub: {
+    fontSize: 12,
+    color: '#888',
+    lineHeight: 17,
+  },
+  onboardingBtn: {
+    backgroundColor: '#FFD700',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  onboardingBtnText: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#000',
   },
   modalCard: {
     backgroundColor: '#fff',
@@ -716,21 +998,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 4,
   },
-  modalButtons: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  modalButtons: { flexDirection: 'row', gap: 10, marginTop: 14 },
   ablehnenButton: {
     flex: 1,
     backgroundColor: '#f5f5f5',
-    borderRadius: 14,
-    padding: 16,
+    borderRadius: 12,
+    padding: 11,
     alignItems: 'center',
   },
-  ablehnenText: { fontSize: 15, color: '#333', fontWeight: '600' },
+  ablehnenText: { fontSize: 13, color: '#333', fontWeight: '600' },
   annehmenButton: {
     flex: 1,
     backgroundColor: '#FFD700',
-    borderRadius: 14,
-    padding: 16,
+    borderRadius: 12,
+    padding: 11,
     alignItems: 'center',
   },
-  annehmenText: { fontSize: 15, color: '#000', fontWeight: 'bold' },
+  annehmenText: { fontSize: 13, color: '#000', fontWeight: 'bold' },
 });

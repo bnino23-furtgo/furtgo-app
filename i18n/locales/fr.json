@@ -20,8 +20,8 @@
     "mobilnummer": "Numéro de mobile (ex. +41 79 123 45 67)",
     "strasse": "Rue et numéro",
     "plzOrt": "Code postal et ville (ex. 1200 Genève)",
-    "baujahr": "Année du véhicule (à partir de {{min}})",
-    "baujahrFehler": "Le véhicule ne doit pas avoir plus de 12 ans (à partir de {{min}}).",
+    "baujahr": "Année du véhicule",
+    "baujahrFehler": "L'année ne peut pas être dans le futur (max. {{jahr}}).",
     "ausweis": "Pièce d'identité / Passeport / Permis de séjour (obligatoire)",
     "kamera": "📷 Appareil photo",
     "galerie": "🖼 Galerie",
@@ -42,7 +42,12 @@
     "fehlerPasswort": "Mot de passe incorrect.",
     "fehlerCredential": "E-mail ou mot de passe incorrect.",
     "fehlerEmailVergeben": "Cet e-mail est déjà enregistré.",
-    "fehlerSchwachesPasswort": "Le mot de passe doit contenir au moins 6 caractères."
+    "fehlerSchwachesPasswort": "Le mot de passe doit contenir au moins 6 caractères.",
+    "fehlerEmailNichtBestaetigt": "Veuillez d'abord confirmer votre e-mail. Cliquez sur le lien dans l'e-mail de confirmation.",
+    "bestaetigungTitel": "✉️ E-mail de confirmation envoyé",
+    "bestaetigungText": "Nous avons envoyé un lien de confirmation à {{email}}. Cliquez sur le lien, puis reconnectez-vous.",
+    "bestaetigungErneutSenden": "Renvoyer l'e-mail de confirmation",
+    "bestaetigungErneutGesendet": "L'e-mail de confirmation a été renvoyé. Veuillez vérifier votre boîte de réception."
   },
   "fahrer": {
     "dashboard": "Tableau de bord chauffeur",
@@ -66,7 +71,7 @@
     "zurueck": "Retour",
     "aboAbgelaufen": "Abonnement expiré",
     "aboAbgelaufenText": "Votre abonnement mensuel a expiré. Veuillez le renouveler pour continuer.",
-    "aboBezahlen": "Payer l'abonnement – CHF 99/mois",
+    "aboBezahlen": "Payer l'abonnement – CHF 60/mois",
     "wieHeisst": "Comment vous appelez-vous ?",
     "nameAngezeigt": "Votre nom sera affiché aux passagers",
     "deinName": "Votre nom",
@@ -74,7 +79,22 @@
     "standortFehlt": "Position manquante",
     "standortFehltText": "Veuillez autoriser l'accès à la position pour passer en ligne.",
     "benachrichtigung": "🚕 Furtgo — Vous êtes en ligne",
-    "benachrichtigungText": "En attente de nouvelles commandes..."
+    "benachrichtigungText": "En attente de nouvelles commandes...",
+    "nichtBereitTitel": "Vous ne pouvez pas encore passer en ligne",
+    "nichtBereitText": "Veuillez compléter toutes les étapes avant de passer en ligne.",
+    "schrittDokumente": "Documents téléchargés",
+    "schrittVerifikation": "Approbation de l'administrateur reçue",
+    "schrittAbo": "Abonnement actif (CHF 60/mois)",
+    "dokumenteHochladen": "Télécharger les documents",
+    "willkommenTitel": "Bienvenue sur Furtgo ! 👋",
+    "willkommenSub": "En 3 étapes, vous êtes prêt",
+    "willkommenSchritt1": "Télécharger les documents",
+    "willkommenSchritt1Sub": "Carte grise, permis de conduire, casier judiciaire",
+    "willkommenSchritt2": "L'admin vérifie vos données",
+    "willkommenSchritt2Sub": "Généralement sous 24–48h — vous recevrez un e-mail",
+    "willkommenSchritt3": "Activer l'abonnement",
+    "willkommenSchritt3Sub": "CHF 60/mois — aucune commission, tous vos revenus",
+    "losGehts": "C'est parti"
   },
   "fahrt": {
     "zumFahrgast": "🧍 En route vers le passager",
@@ -106,7 +126,8 @@
     "bildschirmWachSub": "L'app reste au premier plan",
     "meinAngebot": "Mes services",
     "meinAngebotSub": "Choisissez les services que vous proposez",
-    "eigenTarif": "Tarif personnalisé"
+    "freiWaehlbar": "Tarif personnalisé",
+    "deineKategorie": "Votre catégorie"
   },
   "chat": {
     "titel": "💬 Chat",
@@ -129,7 +150,7 @@
     "aboAktiv": "Actif jusqu'au {{datum}}",
     "aboAbgelaufen": "Expiré le {{datum}}",
     "keinAbo": "Aucun abonnement actif",
-    "aboBezahlen": "💳 Payer l'abonnement – CHF 30/mois",
+    "aboBezahlen": "💳 Payer l'abonnement – CHF 60/mois",
     "fahrgastUebersicht": "Aperçu passager",
     "fahrtenGenutzt": "Courses effectuées",
     "persoenlicheDaten": "Données personnelles",
@@ -192,9 +213,10 @@
     "emailFehler": "Erreur lors de l'envoi du reçu."
   },
   "tarife": {
-    "furtgoX": "Furtgo X",
-    "furtgoComfort": "Furtgo Comfort",
-    "eigenTarif": "Tarif personnalisé",
+    "furtgoMini": "Furtgo Mini",
+    "furtgoPlus": "Furtgo Plus",
+    "furtgoLimu": "Furtgo Limu",
+    "frei": "Tarif personnalisé",
     "nichtVerfuegbar": "non disponible"
   },
   "allgemein": {

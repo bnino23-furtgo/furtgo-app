@@ -60,6 +60,13 @@ const resources = {
 };
 
 const LANGUAGE_KEY = '@furtgo_language';
+const LANGUAGE_KEY_FAHRER = '@furtgo_language_fahrer';
+const LANGUAGE_KEY_FAHRGAST = '@furtgo_language_fahrgast';
+
+export type Rolle = 'fahrer' | 'fahrgast';
+
+const keyForRolle = (rolle: Rolle) =>
+  rolle === 'fahrer' ? LANGUAGE_KEY_FAHRER : LANGUAGE_KEY_FAHRGAST;
 
 const getDeviceLanguage = (): string => {
   const locales = getLocales();
@@ -75,6 +82,7 @@ export const initI18n = async () => {
 
   const lng = savedLang || getDeviceLanguage();
 
+  // eslint-disable-next-line import/no-named-as-default-member
   await i18n.use(initReactI18next).init({
     resources,
     lng,
@@ -83,12 +91,37 @@ export const initI18n = async () => {
   });
 };
 
-export const changeLanguage = async (lang: string) => {
+export const changeLanguage = async (lang: string, rolle?: Rolle) => {
+  // eslint-disable-next-line import/no-named-as-default-member
   await i18n.changeLanguage(lang);
   try {
-    await AsyncStorage.setItem(LANGUAGE_KEY, lang);
+    const key = rolle ? keyForRolle(rolle) : LANGUAGE_KEY;
+    await AsyncStorage.setItem(key, lang);
   } catch {}
 };
+
+export const applyLanguageForRole = async (rolle: Rolle) => {
+  try {
+    const saved = await AsyncStorage.getItem(keyForRolle(rolle));
+    const erlaubteCodes = rolle === 'fahrer'
+      ? driverLanguages.map((l) => l.code)
+      : supportedLanguages.map((l) => l.code);
+    const ziel = saved && erlaubteCodes.includes(saved)
+      ? saved
+      : (erlaubteCodes.includes(i18n.language) ? i18n.language : 'de');
+    if (ziel !== i18n.language) {
+      // eslint-disable-next-line import/no-named-as-default-member
+      await i18n.changeLanguage(ziel);
+    }
+  } catch {}
+};
+
+export const driverLanguages: { code: string; label: string }[] = [
+  { code: 'de', label: 'Deutsch' },
+  { code: 'fr', label: 'Français' },
+  { code: 'it', label: 'Italiano' },
+  { code: 'en', label: 'English' },
+];
 
 export const supportedLanguages: { code: string; label: string }[] = [
   { code: 'de', label: 'Deutsch' },

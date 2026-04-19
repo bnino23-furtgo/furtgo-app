@@ -11,10 +11,11 @@ import { spieleTon } from '@/utils/ton';
 import { formatDistanz } from '@/utils/distanz';
 import { useTranslation } from 'react-i18next';
 
-type Kategorie = 'furtgo_x' | 'furtgo_comfort';
+type Kategorie = 'furtgo_mini' | 'furtgo_plus' | 'furtgo_limu';
 const TARIFE: Record<Kategorie, { label: string }> = {
-  furtgo_x: { label: 'Furtgo X' },
-  furtgo_comfort: { label: 'Furtgo Comfort' },
+  furtgo_mini: { label: 'Furtgo Mini' },
+  furtgo_plus: { label: 'Furtgo Plus' },
+  furtgo_limu: { label: 'Furtgo Limu' },
 };
 
 export default function FahrerFahrt() {
@@ -25,7 +26,7 @@ export default function FahrerFahrt() {
   const [zielort, setZielort] = useState<OrtType | null>(null);
   const [meinStandort, setMeinStandort] = useState<KoordType | null>(null);
   const [preis, setPreis] = useState<number | null>(null);
-  const [fahrgastId, setFahrgastId] = useState<string | null>(null);
+  const [, setFahrgastId] = useState<string | null>(null);
   const [fahrgastEmail, setFahrgastEmail] = useState<string | null>(null);
   const [chatOffen, setChatOffen] = useState(false);
   const [ungelesen, setUngelesen] = useState(0);
@@ -54,7 +55,7 @@ export default function FahrerFahrt() {
       if (data.preis != null) setPreis(data.preis);
       if (data.fahrgastId) setFahrgastId(data.fahrgastId);
       if (data.fahrgastEmail) setFahrgastEmail(data.fahrgastEmail);
-    });
+    }, (err) => console.log('Fahrt-Listener Fehler (ignoriert):', err));
 
     startStandortUpdates();
 
@@ -63,7 +64,7 @@ export default function FahrerFahrt() {
     const unsubChat = onSnapshot(chatQ, (snap) => {
       const fremde = snap.docs.filter((d) => d.data().senderId !== meinUid).length;
       setUngelesen(Math.max(0, fremde - gelesenBisRef.current));
-    });
+    }, (err) => console.log('Chat-Listener Fehler (ignoriert):', err));
 
     // Listener für neue Anfragen während der Fahrt
     const meinUid2 = auth.currentUser?.uid;
@@ -90,7 +91,7 @@ export default function FahrerFahrt() {
             Animated.timing(bannerSlide, { toValue: -200, duration: 200, useNativeDriver: true }).start();
           }
         }
-      });
+      }, (err) => console.log('Neue-Anfragen-Listener Fehler (ignoriert):', err));
     }
 
     return () => {
@@ -100,6 +101,7 @@ export default function FahrerFahrt() {
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
       if (bannerTimeoutRef.current) clearTimeout(bannerTimeoutRef.current);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fahrtId]);
 
   const startStandortUpdates = async () => {
@@ -107,13 +109,17 @@ export default function FahrerFahrt() {
     if (status !== 'granted') return;
 
     const updateLoc = async () => {
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-      setMeinStandort(coords);
-      const uid = auth.currentUser?.uid;
-      if (uid) await updateDoc(doc(db, 'fahrer', uid), { standort: coords });
+      try {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        setMeinStandort(coords);
+        const uid = auth.currentUser?.uid;
+        if (uid) await updateDoc(doc(db, 'fahrer', uid), { standort: coords });
+      } catch (e) {
+        console.log('Fahrt-Standort-Update Fehler (ignoriert):', e);
+      }
     };
 
     await updateLoc();
@@ -379,8 +385,8 @@ export default function FahrerFahrt() {
           <Text style={styles.bannerTitel}>{t('fahrt.neueAnfrageBanner')}</Text>
           <View style={styles.bannerInfo}>
             <Text style={styles.bannerKategorie}>
-              {neueAnfrage.kategorie === 'eigen' ? t('tarife.eigenTarif')
-                : TARIFE[neueAnfrage.kategorie as Kategorie]?.label ?? t('tarife.furtgoX')}
+              {neueAnfrage.kategorie === 'frei' ? t('tarife.frei')
+                : TARIFE[neueAnfrage.kategorie as Kategorie]?.label ?? t('tarife.furtgoMini')}
             </Text>
             <Text style={styles.bannerPreis}>CHF {(neueAnfrage.preis ?? 0).toFixed(2)}</Text>
           </View>

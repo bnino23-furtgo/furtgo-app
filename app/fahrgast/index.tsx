@@ -17,18 +17,21 @@ import AdressSuche from '@/components/AdressSuche';
 import { KoordType, OrtType } from '@/types';
 import { berechneKm } from '@/utils/distanz';
 import { useTranslation } from 'react-i18next';
+import { applyLanguageForRole } from '@/i18n';
 
-type Kategorie = 'furtgo_x' | 'furtgo_comfort' | 'eigen';
+type Kategorie = 'furtgo_mini' | 'furtgo_plus' | 'furtgo_limu' | 'frei';
 
 const TARIFE = {
-  furtgo_x: { grundpreis: 3.50, proKm: 2.20, label: 'Furtgo X', farbe: '#FFD700' },
-  furtgo_comfort: { grundpreis: 5.00, proKm: 2.80, label: 'Furtgo Comfort', farbe: '#60a5fa' },
+  furtgo_mini: { grundpreis: 3.50, proKm: 2.20, label: 'Furtgo Mini', farbe: '#FFD700' },
+  furtgo_plus: { grundpreis: 5.00, proKm: 2.80, label: 'Furtgo Plus', farbe: '#60a5fa' },
+  furtgo_limu: { grundpreis: 8.00, proKm: 6.00, label: 'Furtgo Limu', farbe: '#a855f7' },
 };
 
 type AngebotInfo = {
-  furtgo_x: { verfuegbar: boolean; preis: number };
-  furtgo_comfort: { verfuegbar: boolean; preis: number };
-  eigen: { verfuegbar: boolean; preis: number; fahrerId: string | null };
+  furtgo_mini: { verfuegbar: boolean; preis: number };
+  furtgo_plus: { verfuegbar: boolean; preis: number };
+  furtgo_limu: { verfuegbar: boolean; preis: number };
+  frei: { verfuegbar: boolean; preis: number; fahrerId: string | null };
 };
 
 export default function FahrgastHaupt() {
@@ -39,9 +42,13 @@ export default function FahrgastHaupt() {
   const [laden, setLaden] = useState(false);
   const [zielSchluessel, setZielSchluessel] = useState(0);
   const [abholSchluessel, setAbholSchluessel] = useState(0);
-  const [kategorie, setKategorie] = useState<Kategorie>('furtgo_x');
+  const [kategorie, setKategorie] = useState<Kategorie>('furtgo_mini');
   const [angebote, setAngebote] = useState<AngebotInfo | null>(null);
   const [pruefen, setPruefen] = useState(false);
+
+  useEffect(() => {
+    applyLanguageForRole('fahrgast');
+  }, []);
 
   const sosAnrufen = () => {
     Linking.openURL('tel:117');
@@ -52,7 +59,7 @@ export default function FahrgastHaupt() {
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=de&addressdetails=1`,
-        { headers: { Accept: 'application/json', 'User-Agent': 'MeineUberApp/1.0' } }
+        { headers: { Accept: 'application/json', 'User-Agent': 'Furtgo/1.0' } }
       );
       const data = await res.json();
       const a = data.address || {};
@@ -95,6 +102,7 @@ export default function FahrgastHaupt() {
       setAbholOrt({ ...koord, adresse });
       setAbholSchluessel((k) => k + 1);
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Verfügbarkeit prüfen wenn Start + Ziel vorhanden
@@ -108,11 +116,12 @@ export default function FahrgastHaupt() {
       const km = berechneKm(startOrt, ziel);
       const jetzt = Date.now();
 
-      let hatX = false;
-      let hatComfort = false;
-      let eigenBesterPreis = 0;
-      let eigenBesterFahrerId: string | null = null;
-      let eigenBesterDist = Infinity;
+      let hatMini = false;
+      let hatPlus = false;
+      let hatLimu = false;
+      let freiBesterPreis = 0;
+      let freiBesterFahrerId: string | null = null;
+      let freiBesterDist = Infinity;
 
       fahrerSnap.forEach((d) => {
         const data = d.data();
@@ -125,50 +134,50 @@ export default function FahrgastHaupt() {
         const dist = berechneKm(startOrt, data.standort);
         if (dist > 10) return;
 
-        // Angebote lesen (mit Rückwärtskompatibilität für alte tarifModus-Felder)
+        // Angebote lesen
         let fahrerAngebote: string[] = [];
         if (Array.isArray(data.angebote) && data.angebote.length > 0) {
           fahrerAngebote = data.angebote;
-        } else if (data.tarifModus) {
-          // Alte Fahrer: tarifModus → angebote umwandeln
-          fahrerAngebote = data.tarifModus === 'eigen' ? ['eigen'] : [data.tarifModus];
         } else {
-          // Ganz alte Fahrer ohne Tarif-Infos: Standard
-          fahrerAngebote = ['furtgo_x'];
+          fahrerAngebote = ['furtgo_mini'];
         }
 
-        if (fahrerAngebote.includes('furtgo_x')) hatX = true;
-        if (fahrerAngebote.includes('furtgo_comfort')) hatComfort = true;
-        if (fahrerAngebote.includes('eigen')) {
-          const eigenProKm = typeof data.eigenProKm === 'number' ? data.eigenProKm : 2.20;
-          const eigenPreis = Math.round((3.50 + km * eigenProKm) * 100) / 100;
-          if (dist < eigenBesterDist) {
-            eigenBesterPreis = eigenPreis;
-            eigenBesterFahrerId = d.id;
-            eigenBesterDist = dist;
+        if (fahrerAngebote.includes('furtgo_mini')) hatMini = true;
+        if (fahrerAngebote.includes('furtgo_plus')) hatPlus = true;
+        if (fahrerAngebote.includes('furtgo_limu')) hatLimu = true;
+        if (fahrerAngebote.includes('frei')) {
+          const freiProKm = typeof data.freiProKm === 'number' ? data.freiProKm : (typeof data.eigenProKm === 'number' ? data.eigenProKm : 2.20);
+          const freiPreis = Math.round((3.50 + km * freiProKm) * 100) / 100;
+          if (dist < freiBesterDist) {
+            freiBesterPreis = freiPreis;
+            freiBesterFahrerId = d.id;
+            freiBesterDist = dist;
           }
         }
       });
 
-      const preisX = Math.round((TARIFE.furtgo_x.grundpreis + km * TARIFE.furtgo_x.proKm) * 100) / 100;
-      const preisComfort = Math.round((TARIFE.furtgo_comfort.grundpreis + km * TARIFE.furtgo_comfort.proKm) * 100) / 100;
+      const preisMini = Math.round((TARIFE.furtgo_mini.grundpreis + km * TARIFE.furtgo_mini.proKm) * 100) / 100;
+      const preisPlus = Math.round((TARIFE.furtgo_plus.grundpreis + km * TARIFE.furtgo_plus.proKm) * 100) / 100;
+      const preisLimu = Math.round((TARIFE.furtgo_limu.grundpreis + km * TARIFE.furtgo_limu.proKm) * 100) / 100;
 
-      const hatEigen = eigenBesterFahrerId !== null;
+      const hatFrei = freiBesterFahrerId !== null;
 
       setAngebote({
-        furtgo_x: { verfuegbar: hatX, preis: preisX },
-        furtgo_comfort: { verfuegbar: hatComfort, preis: preisComfort },
-        eigen: {
-          verfuegbar: hatEigen,
-          preis: eigenBesterPreis,
-          fahrerId: eigenBesterFahrerId,
+        furtgo_mini: { verfuegbar: hatMini, preis: preisMini },
+        furtgo_plus: { verfuegbar: hatPlus, preis: preisPlus },
+        furtgo_limu: { verfuegbar: hatLimu, preis: preisLimu },
+        frei: {
+          verfuegbar: hatFrei,
+          preis: freiBesterPreis,
+          fahrerId: freiBesterFahrerId,
         },
       });
 
       // Auto-select erstes verfügbares Angebot
-      if (hatX) setKategorie('furtgo_x');
-      else if (hatComfort) setKategorie('furtgo_comfort');
-      else if (hatEigen) setKategorie('eigen');
+      if (hatMini) setKategorie('furtgo_mini');
+      else if (hatPlus) setKategorie('furtgo_plus');
+      else if (hatLimu) setKategorie('furtgo_limu');
+      else if (hatFrei) setKategorie('frei');
     } catch (e) {
       console.error('Verfügbarkeit prüfen Fehler:', e);
     } finally {
@@ -231,14 +240,12 @@ export default function FahrgastHaupt() {
         const dist = berechneKm(startOrt, data.standort);
         if (dist > 10) return;
 
-        // Angebote lesen (mit Rückwärtskompatibilität)
+        // Angebote lesen
         let fahrerAngebote: string[] = [];
         if (Array.isArray(data.angebote) && data.angebote.length > 0) {
           fahrerAngebote = data.angebote;
-        } else if (data.tarifModus) {
-          fahrerAngebote = data.tarifModus === 'eigen' ? ['eigen'] : [data.tarifModus];
         } else {
-          fahrerAngebote = ['furtgo_x'];
+          fahrerAngebote = ['furtgo_mini'];
         }
 
         if (!fahrerAngebote.includes(kategorie)) return;
@@ -339,77 +346,100 @@ export default function FahrgastHaupt() {
         {/* Angebote anzeigen */}
         {angebote && !pruefen && (
           <View style={styles.angeboteContainer}>
-            {/* Furtgo X */}
+            {/* Furtgo Mini */}
             <TouchableOpacity
               style={[
                 styles.angebotKarte,
-                !angebote.furtgo_x.verfuegbar && styles.angebotNichtVerfuegbar,
-                kategorie === 'furtgo_x' && angebote.furtgo_x.verfuegbar && styles.angebotAktivX,
+                !angebote.furtgo_mini.verfuegbar && styles.angebotNichtVerfuegbar,
+                kategorie === 'furtgo_mini' && angebote.furtgo_mini.verfuegbar && styles.angebotAktivMini,
               ]}
-              onPress={() => angebote.furtgo_x.verfuegbar && setKategorie('furtgo_x')}
-              disabled={!angebote.furtgo_x.verfuegbar}
+              onPress={() => angebote.furtgo_mini.verfuegbar && setKategorie('furtgo_mini')}
+              disabled={!angebote.furtgo_mini.verfuegbar}
             >
               <View style={styles.angebotLinks}>
-                <Text style={[styles.angebotLabel, !angebote.furtgo_x.verfuegbar && styles.angebotLabelGrau]}>
-                  {t('tarife.furtgoX')}
+                <Text style={[styles.angebotLabel, !angebote.furtgo_mini.verfuegbar && styles.angebotLabelGrau]}>
+                  {t('tarife.furtgoMini')}
                 </Text>
                 <Text style={styles.angebotSub}>3.50 + 2.20/km</Text>
               </View>
-              {angebote.furtgo_x.verfuegbar ? (
-                <Text style={styles.angebotPreis}>CHF {angebote.furtgo_x.preis.toFixed(2)}</Text>
+              {angebote.furtgo_mini.verfuegbar ? (
+                <Text style={styles.angebotPreis}>CHF {angebote.furtgo_mini.preis.toFixed(2)}</Text>
               ) : (
                 <Text style={styles.angebotNichtText}>{t('tarife.nichtVerfuegbar')}</Text>
               )}
             </TouchableOpacity>
 
-            {/* Furtgo Comfort */}
+            {/* Furtgo Plus */}
             <TouchableOpacity
               style={[
                 styles.angebotKarte,
-                !angebote.furtgo_comfort.verfuegbar && styles.angebotNichtVerfuegbar,
-                kategorie === 'furtgo_comfort' && angebote.furtgo_comfort.verfuegbar && styles.angebotAktivComfort,
+                !angebote.furtgo_plus.verfuegbar && styles.angebotNichtVerfuegbar,
+                kategorie === 'furtgo_plus' && angebote.furtgo_plus.verfuegbar && styles.angebotAktivPlus,
               ]}
-              onPress={() => angebote.furtgo_comfort.verfuegbar && setKategorie('furtgo_comfort')}
-              disabled={!angebote.furtgo_comfort.verfuegbar}
+              onPress={() => angebote.furtgo_plus.verfuegbar && setKategorie('furtgo_plus')}
+              disabled={!angebote.furtgo_plus.verfuegbar}
             >
               <View style={styles.angebotLinks}>
-                <Text style={[styles.angebotLabel, !angebote.furtgo_comfort.verfuegbar && styles.angebotLabelGrau]}>
-                  {t('tarife.furtgoComfort')}
+                <Text style={[styles.angebotLabel, !angebote.furtgo_plus.verfuegbar && styles.angebotLabelGrau]}>
+                  {t('tarife.furtgoPlus')}
                 </Text>
                 <Text style={styles.angebotSub}>5.00 + 2.80/km</Text>
               </View>
-              {angebote.furtgo_comfort.verfuegbar ? (
-                <Text style={styles.angebotPreis}>CHF {angebote.furtgo_comfort.preis.toFixed(2)}</Text>
+              {angebote.furtgo_plus.verfuegbar ? (
+                <Text style={styles.angebotPreis}>CHF {angebote.furtgo_plus.preis.toFixed(2)}</Text>
               ) : (
                 <Text style={styles.angebotNichtText}>{t('tarife.nichtVerfuegbar')}</Text>
               )}
             </TouchableOpacity>
 
-            {/* Eigen */}
+            {/* Furtgo Limu */}
             <TouchableOpacity
               style={[
                 styles.angebotKarte,
-                !angebote.eigen.verfuegbar && styles.angebotNichtVerfuegbar,
-                kategorie === 'eigen' && angebote.eigen.verfuegbar && styles.angebotAktivEigen,
+                !angebote.furtgo_limu.verfuegbar && styles.angebotNichtVerfuegbar,
+                kategorie === 'furtgo_limu' && angebote.furtgo_limu.verfuegbar && styles.angebotAktivLimu,
               ]}
-              onPress={() => angebote.eigen.verfuegbar && setKategorie('eigen')}
-              disabled={!angebote.eigen.verfuegbar}
+              onPress={() => angebote.furtgo_limu.verfuegbar && setKategorie('furtgo_limu')}
+              disabled={!angebote.furtgo_limu.verfuegbar}
             >
               <View style={styles.angebotLinks}>
-                <Text style={[styles.angebotLabel, !angebote.eigen.verfuegbar && styles.angebotLabelGrau]}>
-                  {t('tarife.eigenTarif')}
+                <Text style={[styles.angebotLabel, !angebote.furtgo_limu.verfuegbar && styles.angebotLabelGrau]}>
+                  {t('tarife.furtgoLimu')}
+                </Text>
+                <Text style={styles.angebotSub}>8.00 + 6.00/km</Text>
+              </View>
+              {angebote.furtgo_limu.verfuegbar ? (
+                <Text style={styles.angebotPreis}>CHF {angebote.furtgo_limu.preis.toFixed(2)}</Text>
+              ) : (
+                <Text style={styles.angebotNichtText}>{t('tarife.nichtVerfuegbar')}</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Frei wählbar */}
+            <TouchableOpacity
+              style={[
+                styles.angebotKarte,
+                !angebote.frei.verfuegbar && styles.angebotNichtVerfuegbar,
+                kategorie === 'frei' && angebote.frei.verfuegbar && styles.angebotAktivFrei,
+              ]}
+              onPress={() => angebote.frei.verfuegbar && setKategorie('frei')}
+              disabled={!angebote.frei.verfuegbar}
+            >
+              <View style={styles.angebotLinks}>
+                <Text style={[styles.angebotLabel, !angebote.frei.verfuegbar && styles.angebotLabelGrau]}>
+                  {t('tarife.frei')}
                 </Text>
                 <Text style={styles.angebotSub}>{t('fahrgast.fahrerPreis')}</Text>
               </View>
-              {angebote.eigen.verfuegbar ? (
-                <Text style={styles.angebotPreis}>CHF {angebote.eigen.preis.toFixed(2)}</Text>
+              {angebote.frei.verfuegbar ? (
+                <Text style={styles.angebotPreis}>CHF {angebote.frei.preis.toFixed(2)}</Text>
               ) : (
                 <Text style={styles.angebotNichtText}>{t('tarife.nichtVerfuegbar')}</Text>
               )}
             </TouchableOpacity>
 
             {/* Keine Angebote */}
-            {!angebote.furtgo_x.verfuegbar && !angebote.furtgo_comfort.verfuegbar && !angebote.eigen.verfuegbar && (
+            {!angebote.furtgo_mini.verfuegbar && !angebote.furtgo_plus.verfuegbar && !angebote.furtgo_limu.verfuegbar && !angebote.frei.verfuegbar && (
               <Text style={styles.keineAngeboteText}>{t('fahrgast.keinFahrerNaehe')}</Text>
             )}
           </View>
@@ -422,8 +452,9 @@ export default function FahrgastHaupt() {
               styles.button,
               {
                 backgroundColor:
-                  kategorie === 'furtgo_x' ? '#FFD700'
-                    : kategorie === 'furtgo_comfort' ? '#60a5fa'
+                  kategorie === 'furtgo_mini' ? '#FFD700'
+                    : kategorie === 'furtgo_plus' ? '#60a5fa'
+                    : kategorie === 'furtgo_limu' ? '#a855f7'
                     : '#4ade80',
               },
               laden && styles.buttonDisabled,
@@ -435,7 +466,7 @@ export default function FahrgastHaupt() {
               <ActivityIndicator color="#000" />
             ) : (
               <Text style={styles.buttonText}>
-                {kategorie === 'eigen' ? t('tarife.eigenTarif') : kategorie === 'furtgo_x' ? t('tarife.furtgoX') : t('tarife.furtgoComfort')} — CHF {gewaehlterPreis?.toFixed(2)} {t('fahrgast.anfordern')}
+                {kategorie === 'frei' ? t('tarife.frei') : TARIFE[kategorie as keyof typeof TARIFE]?.label ?? t('tarife.furtgoMini')} — CHF {gewaehlterPreis?.toFixed(2)} {t('fahrgast.anfordern')}
               </Text>
             )}
           </TouchableOpacity>
@@ -477,8 +508,8 @@ const styles = StyleSheet.create({
   topBtn: {
     backgroundColor: '#fff',
     borderRadius: 50,
-    width: 42,
-    height: 42,
+    width: 34,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -486,7 +517,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 6,
   },
-  topBtnText: { fontSize: 24, fontWeight: 'bold', color: '#111', lineHeight: 26 },
+  topBtnText: { fontSize: 18, fontWeight: '900', color: '#111', lineHeight: 20 },
   panel: {
     position: 'absolute',
     top: 100,
@@ -541,9 +572,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#eee',
   },
-  angebotAktivX: { borderColor: '#FFD700', backgroundColor: '#fffbeb' },
-  angebotAktivComfort: { borderColor: '#60a5fa', backgroundColor: '#eff6ff' },
-  angebotAktivEigen: { borderColor: '#4ade80', backgroundColor: '#f0fdf4' },
+  angebotAktivMini: { borderColor: '#FFD700', backgroundColor: '#fffbeb' },
+  angebotAktivPlus: { borderColor: '#60a5fa', backgroundColor: '#eff6ff' },
+  angebotAktivLimu: { borderColor: '#a855f7', backgroundColor: '#faf5ff' },
+  angebotAktivFrei: { borderColor: '#4ade80', backgroundColor: '#f0fdf4' },
   angebotNichtVerfuegbar: { opacity: 0.45 },
   angebotLinks: {},
   angebotLabel: { fontSize: 12, fontWeight: 'bold', color: '#111' },
@@ -574,9 +606,9 @@ const styles = StyleSheet.create({
     bottom: 28,
     right: 14,
     backgroundColor: '#e53e3e',
-    borderRadius: 28,
-    width: 52,
-    height: 52,
+    borderRadius: 22,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',

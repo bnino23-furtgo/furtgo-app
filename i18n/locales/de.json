@@ -22,8 +22,8 @@
     "mobilnummer": "Mobilnummer (z.B. +41 79 123 45 67)",
     "strasse": "Strasse und Hausnummer",
     "plzOrt": "PLZ und Ortschaft (z.B. 8001 Zürich)",
-    "baujahr": "Baujahr Fahrzeug (ab {{min}})",
-    "baujahrFehler": "Fahrzeug darf nicht älter als 12 Jahre sein (ab {{min}}).",
+    "baujahr": "Baujahr Fahrzeug",
+    "baujahrFehler": "Baujahr darf nicht in der Zukunft liegen (max. {{jahr}}).",
     "ausweis": "Ausweis / Pass / Ausländerbewilligung (Pflicht)",
     "kamera": "📷 Kamera",
     "galerie": "🖼 Galerie",
@@ -44,7 +44,12 @@
     "fehlerPasswort": "Falsches Passwort.",
     "fehlerCredential": "E-Mail oder Passwort ist falsch.",
     "fehlerEmailVergeben": "Diese E-Mail ist bereits registriert.",
-    "fehlerSchwachesPasswort": "Passwort muss mindestens 6 Zeichen haben."
+    "fehlerSchwachesPasswort": "Passwort muss mindestens 6 Zeichen haben.",
+    "fehlerEmailNichtBestaetigt": "Bitte bestätige zuerst deine E-Mail. Klicke den Link in der Bestätigungs-Mail.",
+    "bestaetigungTitel": "✉️ Bestätigungs-Mail gesendet",
+    "bestaetigungText": "Wir haben einen Bestätigungs-Link an {{email}} gesendet. Bitte klicke den Link und logge dich danach neu ein.",
+    "bestaetigungErneutSenden": "Bestätigungs-Mail erneut senden",
+    "bestaetigungErneutGesendet": "Bestätigungs-Mail wurde erneut gesendet. Bitte prüfe dein Postfach."
   },
   "fahrer": {
     "dashboard": "Fahrer-Dashboard",
@@ -68,7 +73,7 @@
     "zurueck": "Zurück",
     "aboAbgelaufen": "Abo abgelaufen",
     "aboAbgelaufenText": "Dein monatliches Abo ist abgelaufen. Bitte erneuere es um weiterfahren zu können.",
-    "aboBezahlen": "Abo bezahlen – CHF 99/Monat",
+    "aboBezahlen": "Abo bezahlen – CHF 60/Monat",
     "wieHeisst": "Wie heißt du?",
     "nameAngezeigt": "Dein Name wird den Fahrgästen angezeigt",
     "deinName": "Dein Name",
@@ -76,7 +81,22 @@
     "standortFehlt": "Standort fehlt",
     "standortFehltText": "Bitte erlaube den Standortzugriff im Browser, um online zu gehen.",
     "benachrichtigung": "🚕 Furtgo — Du bist online",
-    "benachrichtigungText": "Warte auf neue Aufträge..."
+    "benachrichtigungText": "Warte auf neue Aufträge...",
+    "nichtBereitTitel": "Du kannst noch nicht online gehen",
+    "nichtBereitText": "Bitte schliesse zuerst alle Schritte ab, bevor du online gehst.",
+    "schrittDokumente": "Dokumente hochgeladen",
+    "schrittVerifikation": "Admin-Freigabe erhalten",
+    "schrittAbo": "Abo aktiv (CHF 60/Monat)",
+    "dokumenteHochladen": "Dokumente hochladen",
+    "willkommenTitel": "Willkommen bei Furtgo! 👋",
+    "willkommenSub": "In 3 Schritten bist du startklar",
+    "willkommenSchritt1": "Dokumente hochladen",
+    "willkommenSchritt1Sub": "Fahrzeugausweis, Führerschein, Strafregister",
+    "willkommenSchritt2": "Admin prüft deine Daten",
+    "willkommenSchritt2Sub": "Meist innerhalb 24–48h — du erhältst eine E-Mail",
+    "willkommenSchritt3": "Abo aktivieren",
+    "willkommenSchritt3Sub": "CHF 60/Monat — keine Provision, dein ganzer Umsatz",
+    "losGehts": "Los geht's"
   },
   "fahrt": {
     "zumFahrgast": "🧍 Zum Fahrgast fahren",
@@ -108,7 +128,8 @@
     "bildschirmWachSub": "App bleibt im Vordergrund",
     "meinAngebot": "Mein Angebot",
     "meinAngebotSub": "Wähle welche Dienste du anbietest",
-    "eigenTarif": "Eigen-Tarif"
+    "freiWaehlbar": "Frei wählbar",
+    "deineKategorie": "Deine Kategorie"
   },
   "chat": {
     "titel": "💬 Chat",
@@ -131,7 +152,7 @@
     "aboAktiv": "Aktiv bis {{datum}}",
     "aboAbgelaufen": "Abgelaufen am {{datum}}",
     "keinAbo": "Kein aktives Abo",
-    "aboBezahlen": "💳 Abo bezahlen – CHF 30/Monat",
+    "aboBezahlen": "💳 Abo bezahlen – CHF 60/Monat",
     "fahrgastUebersicht": "Fahrgast-Übersicht",
     "fahrtenGenutzt": "Fahrten genutzt",
     "persoenlicheDaten": "Persönliche Daten",
@@ -194,9 +215,10 @@
     "emailFehler": "Unbekannter Fehler beim Senden der Quittung."
   },
   "tarife": {
-    "furtgoX": "Furtgo X",
-    "furtgoComfort": "Furtgo Comfort",
-    "eigenTarif": "Eigen-Tarif",
+    "furtgoMini": "Furtgo Mini",
+    "furtgoPlus": "Furtgo Plus",
+    "furtgoLimu": "Furtgo Limu",
+    "frei": "Frei wählbar",
     "nichtVerfuegbar": "nicht verfügbar"
   },
   "fahrgast": {

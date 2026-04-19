@@ -54,7 +54,8 @@ export default function Chat({ fahrtId, rolle, onSchliessen }: Props) {
         }
         return neu;
       });
-    });
+    }, (err) => console.log('Chat-Nachrichten-Listener Fehler (ignoriert):', err));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fahrtId]);
 
   const senden = async () => {

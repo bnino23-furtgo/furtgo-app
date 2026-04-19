@@ -10,19 +10,18 @@ import {
   Platform,
   ScrollView,
   Image,
+  Linking,
 } from 'react-native';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, sendEmailVerification, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '@/constants/firebase';
-import { Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 
 const LEGAL_URL = 'https://bnino23-furtgo.github.io/furtgo-legal';
 
 const AKTUELLES_JAHR = new Date().getFullYear();
-const MIN_BAUJAHR = AKTUELLES_JAHR - 12; // Fahrzeug max. 12 Jahre alt
 
 export default function LoginScreen() {
   const { t } = useTranslation();
@@ -32,6 +31,8 @@ export default function LoginScreen() {
   const [laden, setLaden] = useState(false);
   const [fehler, setFehler] = useState('');
   const [resetErfolg, setResetErfolg] = useState('');
+  const [bestaetigungGesendet, setBestaetigungGesendet] = useState<string | null>(null);
+  const [kannErneutSenden, setKannErneutSenden] = useState<string | null>(null);
 
   // Registrierungs-Felder
   const [vorname, setVorname] = useState('');
@@ -58,6 +59,25 @@ export default function LoginScreen() {
     }
   };
 
+  const bestaetigungErneutSenden = async () => {
+    if (!kannErneutSenden || !passwort.trim()) {
+      setFehler(t('login.fehlerEmailPasswort'));
+      return;
+    }
+    setFehler('');
+    try {
+      const { user } = await signInWithEmailAndPassword(auth, kannErneutSenden, passwort);
+      if (!user.emailVerified) {
+        await sendEmailVerification(user);
+      }
+      await signOut(auth);
+      setResetErfolg(t('login.bestaetigungErneutGesendet'));
+      setKannErneutSenden(null);
+    } catch {
+      setFehler(t('login.fehlerPasswort'));
+    }
+  };
+
   const passwortZuruecksetzen = async () => {
     setFehler('');
     setResetErfolg('');
@@ -68,7 +88,7 @@ export default function LoginScreen() {
     try {
       await sendPasswordResetEmail(auth, email.trim());
       setResetErfolg(t('login.resetErfolg'));
-    } catch (e: any) {
+    } catch {
       setFehler(t('login.fehlerUngueltigeEmail'));
     }
   };
@@ -106,8 +126,8 @@ export default function LoginScreen() {
           setFehler(t('login.fehlerBaujahr'));
           return;
         }
-        if (baujahrZahl < MIN_BAUJAHR || baujahrZahl > AKTUELLES_JAHR) {
-          setFehler(t('login.baujahrFehler', { min: MIN_BAUJAHR }));
+        if (baujahrZahl > AKTUELLES_JAHR) {
+          setFehler(t('login.baujahrFehler', { jahr: AKTUELLES_JAHR }));
           return;
         }
       }
@@ -158,8 +178,26 @@ export default function LoginScreen() {
             erstelltAm: Date.now(),
           });
         }
+        try {
+          await sendEmailVerification(user);
+        } catch {
+          // Mail-Versand-Fehler blockiert nicht die Registrierung
+        }
+        await signOut(auth);
+        setBestaetigungGesendet(email.trim());
+        setIsRegistrierung(false);
+        setVorname(''); setNachname(''); setTelefon('');
+        setStrasse(''); setOrtschaft(''); setBaujahr('');
+        setAgbAkzeptiert(false); setAusweisUri(null);
+        setPasswort('');
       } else {
-        await signInWithEmailAndPassword(auth, email.trim(), passwort);
+        const { user } = await signInWithEmailAndPassword(auth, email.trim(), passwort);
+        if (!user.emailVerified) {
+          await signOut(auth);
+          setFehler(t('login.fehlerEmailNichtBestaetigt'));
+          setKannErneutSenden(email.trim());
+          return;
+        }
       }
     } catch (e: any) {
       const meldungen: Record<string, string> = {
@@ -185,7 +223,19 @@ export default function LoginScreen() {
         contentContainerStyle={[styles.container, !isRegistrierung && styles.containerZentriert]}
         keyboardShouldPersistTaps="handled"
       >
-        <Image source={require('@/assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+        <View style={styles.logoWrapper}>
+          <View style={styles.logoLine} />
+          {['25%', '50%', '75%'].map((topPos) => (
+            <View key={topPos} style={[styles.roadDashes, { top: topPos as any }]}>
+              {Array.from({ length: 30 }).map((_, i) => (
+                <View key={i} style={styles.roadDash} />
+              ))}
+            </View>
+          ))}
+          <View style={styles.logoSide} />
+          <Image source={require('@/assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+          <View style={styles.logoSide} />
+        </View>
         <Text style={styles.untertitel}>
           {isRegistrierung ? t('login.neuesKonto') : t('login.willkommen')}
         </Text>
@@ -222,7 +272,7 @@ export default function LoginScreen() {
             {rolle === 'fahrer' && (
               <TextInput
                 style={[styles.input, styles.inputRegister]}
-                placeholder={t('login.baujahr', { min: MIN_BAUJAHR })}
+                placeholder={t('login.baujahr')}
                 placeholderTextColor="#6a9a6a"
                 value={baujahr}
                 onChangeText={setBaujahr}
@@ -336,8 +386,23 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
+        {bestaetigungGesendet && (
+          <View style={styles.bestaetigungBox}>
+            <Text style={styles.bestaetigungTitel}>{t('login.bestaetigungTitel')}</Text>
+            <Text style={styles.bestaetigungText}>
+              {t('login.bestaetigungText', { email: bestaetigungGesendet })}
+            </Text>
+          </View>
+        )}
+
         {fehler ? <Text style={styles.fehler}>{fehler}</Text> : null}
         {resetErfolg ? <Text style={styles.erfolg}>{resetErfolg}</Text> : null}
+
+        {kannErneutSenden && (
+          <TouchableOpacity onPress={bestaetigungErneutSenden} style={styles.resetButton}>
+            <Text style={styles.resetText}>{t('login.bestaetigungErneutSenden')}</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity onPress={() => { setIsRegistrierung(!isRegistrierung); setFehler(''); }}>
           <Text style={styles.wechseln}>
@@ -368,11 +433,43 @@ const styles = StyleSheet.create({
   containerZentriert: {
     justifyContent: 'flex-start',
   },
+  logoWrapper: {
+    height: 100,
+    marginBottom: 4,
+    marginHorizontal: -22,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoSide: {
+    flex: 1,
+  },
+  logoLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#FFD700',
+  },
+  roadDashes: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    marginTop: -0.5,
+    height: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    overflow: 'hidden',
+  },
+  roadDash: {
+    width: 6,
+    height: 1,
+    backgroundColor: '#000',
+  },
   logoImage: {
     width: 100,
     height: 100,
-    alignSelf: 'center',
-    marginBottom: 4,
   },
   untertitel: {
     fontSize: 13,
@@ -488,6 +585,27 @@ const styles = StyleSheet.create({
   },
   resetButton: { marginTop: 12, alignItems: 'center' },
   resetText: { color: '#FFD700', fontSize: 12 },
+  bestaetigungBox: {
+    backgroundColor: '#0f2d18',
+    borderColor: '#4ade80',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  bestaetigungTitel: {
+    color: '#4ade80',
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  bestaetigungText: {
+    color: '#aaa',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
   ausweisPickBtn: {
     flex: 1, paddingVertical: 8, borderRadius: 9,
     borderWidth: 1, borderColor: '#1e4d2b',
