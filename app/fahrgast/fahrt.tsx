@@ -68,7 +68,7 @@ export default function FahrgastFahrt() {
     return onSnapshot(doc(db, 'fahrer', fahrerId), (snap) => {
       const data = snap.data();
       if (data?.standort) setFahrerStandort(data.standort);
-      if (data?.name) setFahrerName(data.name);
+      if (data?.name) setFahrerName(String(data.name).trim().split(/\s+/)[0]);
       if (data?.bewertungsDurchschnitt != null) setFahrerBewertung(data.bewertungsDurchschnitt);
       if (data?.fahrzeug) setFahrzeug(data.fahrzeug);
     }, (err) => console.log('Fahrer-Listener Fehler (ignoriert):', err));

@@ -20,10 +20,11 @@ interface Vorschlag {
 interface Props {
   placeholder?: string;
   onAuswahl: (ort: OrtType) => void;
+  onClear?: () => void;
   initialWert?: string;
 }
 
-export default function AdressSuche({ placeholder = 'Wohin?', onAuswahl, initialWert }: Props) {
+export default function AdressSuche({ placeholder = 'Wohin?', onAuswahl, onClear, initialWert }: Props) {
   const [eingabe, setEingabe] = useState(initialWert ?? '');
   const [vorschlaege, setVorschlaege] = useState<Vorschlag[]>([]);
   const [laden, setLaden] = useState(false);
@@ -70,6 +71,11 @@ export default function AdressSuche({ placeholder = 'Wohin?', onAuswahl, initial
   const onChange = (text: string) => {
     setEingabe(text);
     if (timerRef.current) clearTimeout(timerRef.current);
+    if (text.length === 0) {
+      setVorschlaege([]);
+      onClear?.();
+      return;
+    }
     timerRef.current = setTimeout(() => suchen(text), 500);
   };
 

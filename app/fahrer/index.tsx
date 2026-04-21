@@ -310,6 +310,9 @@ export default function FahrerDashboard() {
     if (!ref) return;
 
     setOnline(wert);
+    if (wert) spieleTon.onlineAn();
+    else spieleTon.onlineAus();
+
     const aktuellerStandort = await standortAktualisieren();
     if (wert && !aktuellerStandort) {
       Alert.alert(t('fahrer.standortFehlt'), t('fahrer.standortFehltText'));

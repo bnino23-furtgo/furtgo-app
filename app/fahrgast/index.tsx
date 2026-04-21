@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
-import { collection, addDoc, serverTimestamp, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, getDocs, onSnapshot, query, where, doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import MapComponent from '@/components/MapComponent';
 import AdressSuche from '@/components/AdressSuche';
@@ -105,105 +105,109 @@ export default function FahrgastHaupt() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Verfügbarkeit prüfen wenn Start + Ziel vorhanden
-  const pruefeVerfuegbarkeit = async (startOrt: OrtType, ziel: OrtType) => {
-    setPruefen(true);
-    try {
-      const fahrerSnap = await getDocs(
-        query(collection(db, 'fahrer'), where('online', '==', true))
-      );
-
-      const km = berechneKm(startOrt, ziel);
-      const jetzt = Date.now();
-
-      let hatMini = false;
-      let hatPlus = false;
-      let hatLimu = false;
-      let freiBesterPreis = 0;
-      let freiBesterFahrerId: string | null = null;
-      let freiBesterDist = Infinity;
-
-      fahrerSnap.forEach((d) => {
-        const data = d.data();
-        const lastSeen = typeof data.lastSeen === 'number' ? data.lastSeen : 0;
-        if (jetzt - lastSeen > 30000) {
-          updateDoc(doc(db, 'fahrer', d.id), { online: false }).catch(() => {});
-          return;
-        }
-        if (!data.standort?.latitude) return;
-        const dist = berechneKm(startOrt, data.standort);
-        if (dist > 10) return;
-
-        // Angebote lesen
-        let fahrerAngebote: string[] = [];
-        if (Array.isArray(data.angebote) && data.angebote.length > 0) {
-          fahrerAngebote = data.angebote;
-        } else {
-          fahrerAngebote = ['furtgo_mini'];
-        }
-
-        if (fahrerAngebote.includes('furtgo_mini')) hatMini = true;
-        if (fahrerAngebote.includes('furtgo_plus')) hatPlus = true;
-        if (fahrerAngebote.includes('furtgo_limu')) hatLimu = true;
-        if (fahrerAngebote.includes('frei')) {
-          const freiProKm = typeof data.freiProKm === 'number' ? data.freiProKm : (typeof data.eigenProKm === 'number' ? data.eigenProKm : 2.20);
-          const freiPreis = Math.round((3.50 + km * freiProKm) * 100) / 100;
-          if (dist < freiBesterDist) {
-            freiBesterPreis = freiPreis;
-            freiBesterFahrerId = d.id;
-            freiBesterDist = dist;
-          }
-        }
-      });
-
-      const preisMini = Math.round((TARIFE.furtgo_mini.grundpreis + km * TARIFE.furtgo_mini.proKm) * 100) / 100;
-      const preisPlus = Math.round((TARIFE.furtgo_plus.grundpreis + km * TARIFE.furtgo_plus.proKm) * 100) / 100;
-      const preisLimu = Math.round((TARIFE.furtgo_limu.grundpreis + km * TARIFE.furtgo_limu.proKm) * 100) / 100;
-
-      const hatFrei = freiBesterFahrerId !== null;
-
-      setAngebote({
-        furtgo_mini: { verfuegbar: hatMini, preis: preisMini },
-        furtgo_plus: { verfuegbar: hatPlus, preis: preisPlus },
-        furtgo_limu: { verfuegbar: hatLimu, preis: preisLimu },
-        frei: {
-          verfuegbar: hatFrei,
-          preis: freiBesterPreis,
-          fahrerId: freiBesterFahrerId,
-        },
-      });
-
-      // Auto-select erstes verfügbares Angebot
-      if (hatMini) setKategorie('furtgo_mini');
-      else if (hatPlus) setKategorie('furtgo_plus');
-      else if (hatLimu) setKategorie('furtgo_limu');
-      else if (hatFrei) setKategorie('frei');
-    } catch (e) {
-      console.error('Verfügbarkeit prüfen Fehler:', e);
-    } finally {
+  // Live-Update: abonniert online-Fahrer, berechnet Angebote bei jeder Änderung neu
+  useEffect(() => {
+    const startOrt = abholOrt ?? (standort ? { ...standort, adresse: 'Mein Standort' } : null);
+    if (!startOrt || !zielOrt) {
+      setAngebote(null);
       setPruefen(false);
+      return;
     }
-  };
+
+    setPruefen(true);
+    let ersteAntwort = true;
+
+    const unsub = onSnapshot(
+      query(collection(db, 'fahrer'), where('online', '==', true)),
+      (fahrerSnap) => {
+        const km = berechneKm(startOrt, zielOrt);
+        const jetzt = Date.now();
+
+        let hatMini = false;
+        let hatPlus = false;
+        let hatLimu = false;
+        let freiBesterPreis = 0;
+        let freiBesterFahrerId: string | null = null;
+        let freiBesterDist = Infinity;
+
+        fahrerSnap.forEach((d) => {
+          const data = d.data();
+          const lastSeen = typeof data.lastSeen === 'number' ? data.lastSeen : 0;
+          if (jetzt - lastSeen > 30000) {
+            updateDoc(doc(db, 'fahrer', d.id), { online: false }).catch(() => {});
+            return;
+          }
+          if (!data.standort?.latitude) return;
+          const dist = berechneKm(startOrt, data.standort);
+          if (dist > 10) return;
+
+          let fahrerAngebote: string[] = [];
+          if (Array.isArray(data.angebote) && data.angebote.length > 0) {
+            fahrerAngebote = data.angebote;
+          } else {
+            fahrerAngebote = ['furtgo_mini'];
+          }
+
+          if (fahrerAngebote.includes('furtgo_mini')) hatMini = true;
+          if (fahrerAngebote.includes('furtgo_plus')) hatPlus = true;
+          if (fahrerAngebote.includes('furtgo_limu')) hatLimu = true;
+          if (fahrerAngebote.includes('frei')) {
+            const freiProKm = typeof data.freiProKm === 'number' ? data.freiProKm : (typeof data.eigenProKm === 'number' ? data.eigenProKm : 2.20);
+            const freiPreis = Math.round((3.50 + km * freiProKm) * 100) / 100;
+            if (dist < freiBesterDist) {
+              freiBesterPreis = freiPreis;
+              freiBesterFahrerId = d.id;
+              freiBesterDist = dist;
+            }
+          }
+        });
+
+        const preisMini = Math.round((TARIFE.furtgo_mini.grundpreis + km * TARIFE.furtgo_mini.proKm) * 100) / 100;
+        const preisPlus = Math.round((TARIFE.furtgo_plus.grundpreis + km * TARIFE.furtgo_plus.proKm) * 100) / 100;
+        const preisLimu = Math.round((TARIFE.furtgo_limu.grundpreis + km * TARIFE.furtgo_limu.proKm) * 100) / 100;
+
+        const hatFrei = freiBesterFahrerId !== null;
+
+        setAngebote({
+          furtgo_mini: { verfuegbar: hatMini, preis: preisMini },
+          furtgo_plus: { verfuegbar: hatPlus, preis: preisPlus },
+          furtgo_limu: { verfuegbar: hatLimu, preis: preisLimu },
+          frei: { verfuegbar: hatFrei, preis: freiBesterPreis, fahrerId: freiBesterFahrerId },
+        });
+
+        // Auto-select nur beim ersten Snapshot, damit live-Updates die Auswahl nicht überschreiben
+        if (ersteAntwort) {
+          if (hatMini) setKategorie('furtgo_mini');
+          else if (hatPlus) setKategorie('furtgo_plus');
+          else if (hatLimu) setKategorie('furtgo_limu');
+          else if (hatFrei) setKategorie('frei');
+          ersteAntwort = false;
+          setPruefen(false);
+        }
+      },
+      (e) => {
+        console.error('Fahrer-Listener Fehler:', e);
+        setPruefen(false);
+      }
+    );
+
+    return () => unsub();
+  }, [abholOrt, zielOrt, standort]);
 
   const gpsZuruecksetzen = async () => {
     if (standort) {
       const adresse = await reverseGeocode(standort.latitude, standort.longitude);
-      const ort = { ...standort, adresse };
-      setAbholOrt(ort);
+      setAbholOrt({ ...standort, adresse });
       setAbholSchluessel((k) => k + 1);
-      if (zielOrt) pruefeVerfuegbarkeit(ort, zielOrt);
     }
   };
 
   const onAbholAuswaehlen = (ort: OrtType) => {
     setAbholOrt(ort);
-    if (zielOrt) pruefeVerfuegbarkeit(ort, zielOrt);
   };
 
   const onZielAuswaehlen = (ort: OrtType) => {
     setZielOrt(ort);
-    const basis = abholOrt ?? (standort ? { ...standort, adresse: abholOrt?.adresse ?? 'Mein Standort' } : null);
-    if (basis) pruefeVerfuegbarkeit(basis, ort);
   };
 
   const fahrerAnfordern = async () => {
@@ -264,9 +268,19 @@ export default function FahrgastHaupt() {
 
       const endPreis = info.preis;
 
+      let fahrgastVorname: string | null = null;
+      try {
+        const nutzerSnap = await getDoc(doc(db, 'nutzer', user.uid));
+        const vn = nutzerSnap.data()?.vorname;
+        if (typeof vn === 'string' && vn.trim()) fahrgastVorname = vn.trim();
+      } catch {}
+      if (!fahrgastVorname) {
+        fahrgastVorname = (user.displayName ?? '').trim().split(/\s+/)[0] || null;
+      }
       const docRef = await addDoc(collection(db, 'fahrten'), {
         fahrgastId: user.uid,
         fahrgastEmail: user.email ?? null,
+        fahrgastVorname,
         fahrerId: null,
         abholort: startOrt,
         zielort: zielOrt,
@@ -318,6 +332,7 @@ export default function FahrgastHaupt() {
               key={`abholort-${abholSchluessel}`}
               placeholder={t('fahrgast.abholort')}
               onAuswahl={onAbholAuswaehlen}
+              onClear={() => setAbholOrt(null)}
               initialWert={abholOrt?.adresse ?? t('fahrgast.meinStandort')}
             />
           </View>
@@ -333,6 +348,7 @@ export default function FahrgastHaupt() {
           key={`ziel-${zielSchluessel}`}
           placeholder={t('fahrgast.zielEingeben')}
           onAuswahl={onZielAuswaehlen}
+          onClear={() => setZielOrt(null)}
         />
 
         {/* Laden-Indikator */}

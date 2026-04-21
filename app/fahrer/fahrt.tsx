@@ -28,6 +28,7 @@ export default function FahrerFahrt() {
   const [preis, setPreis] = useState<number | null>(null);
   const [, setFahrgastId] = useState<string | null>(null);
   const [fahrgastEmail, setFahrgastEmail] = useState<string | null>(null);
+  const [fahrgastVorname, setFahrgastVorname] = useState<string | null>(null);
   const [chatOffen, setChatOffen] = useState(false);
   const [ungelesen, setUngelesen] = useState(0);
   const [stornierenModal, setStornierenModal] = useState(false);
@@ -55,6 +56,7 @@ export default function FahrerFahrt() {
       if (data.preis != null) setPreis(data.preis);
       if (data.fahrgastId) setFahrgastId(data.fahrgastId);
       if (data.fahrgastEmail) setFahrgastEmail(data.fahrgastEmail);
+      if (data.fahrgastVorname) setFahrgastVorname(data.fahrgastVorname);
     }, (err) => console.log('Fahrt-Listener Fehler (ignoriert):', err));
 
     startStandortUpdates();
@@ -336,6 +338,9 @@ export default function FahrerFahrt() {
 
       <View style={styles.infoPanel}>
         <Text style={styles.statusLabel}>{STATUS_LABEL[status] ?? 'Aktive Fahrt'}</Text>
+        {fahrgastVorname && (
+          <Text style={styles.fahrgastName}>🧑 {fahrgastVorname}</Text>
+        )}
         {status === 'angenommen' && abholort && (
           <Text style={styles.adresse}>📍 {abholort.adresse ?? 'Abholort'}</Text>
         )}
@@ -467,6 +472,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   adresse: { fontSize: 13, color: '#555', textAlign: 'center' },
+  fahrgastName: { fontSize: 14, fontWeight: '600', color: '#222', textAlign: 'center', marginBottom: 6 },
   distanz: { fontSize: 16, color: '#111', fontWeight: '700', textAlign: 'center', marginTop: 6 },
   actionButton: {
     position: 'absolute',

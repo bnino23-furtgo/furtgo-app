@@ -1,21 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  TextInput,
   Alert,
   ActivityIndicator,
   Image,
   Linking,
 } from 'react-native';
 import { router } from 'expo-router';
-import { addDoc, collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '@/constants/firebase';
-
-const ADMIN_PIN = '1234';
+import { addDoc, collection, getDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { auth, db } from '@/constants/firebase';
 
 interface FahrerDaten {
   id: string;
@@ -37,20 +34,24 @@ interface FahrerDaten {
 }
 
 export default function AdminPanel() {
-  const [pin, setPin] = useState('');
-  const [freigegeben, setFreigegeben] = useState(false);
+  const [istAdmin, setIstAdmin] = useState<boolean | null>(null);
   const [fahrer, setFahrer] = useState<FahrerDaten[]>([]);
   const [laden, setLaden] = useState(false);
 
-  const pinPruefen = () => {
-    if (pin === ADMIN_PIN) {
-      setFreigegeben(true);
-      fahrerLaden();
-    } else {
-      Alert.alert('Falsch', 'Falscher PIN.');
-      setPin('');
-    }
-  };
+  useEffect(() => {
+    (async () => {
+      const uid = auth.currentUser?.uid;
+      if (!uid) { setIstAdmin(false); return; }
+      try {
+        const snap = await getDoc(doc(db, 'nutzer', uid));
+        const ok = snap.data()?.istAdmin === true;
+        setIstAdmin(ok);
+        if (ok) fahrerLaden();
+      } catch {
+        setIstAdmin(false);
+      }
+    })();
+  }, []);
 
   const fahrerLaden = async () => {
     setLaden(true);
@@ -170,27 +171,22 @@ export default function AdminPanel() {
     );
   };
 
-  if (!freigegeben) {
+  if (istAdmin === null) {
+    return (
+      <View style={styles.pinContainer}>
+        <ActivityIndicator size="large" color="#FFD700" />
+      </View>
+    );
+  }
+
+  if (istAdmin === false) {
     return (
       <View style={styles.pinContainer}>
         <TouchableOpacity style={styles.zurueckBtn} onPress={() => router.back()}>
           <Text style={styles.zurueckPfeil}>&#x2039;</Text>
         </TouchableOpacity>
-        <Text style={styles.pinTitel}>Admin-Bereich</Text>
-        <Text style={styles.pinSub}>PIN eingeben</Text>
-        <TextInput
-          style={styles.pinInput}
-          value={pin}
-          onChangeText={setPin}
-          keyboardType="number-pad"
-          secureTextEntry
-          maxLength={6}
-          placeholder="****"
-          placeholderTextColor="#555"
-        />
-        <TouchableOpacity style={styles.pinButton} onPress={pinPruefen}>
-          <Text style={styles.pinButtonText}>Zugang</Text>
-        </TouchableOpacity>
+        <Text style={styles.pinTitel}>Kein Zugang</Text>
+        <Text style={styles.pinSub}>Dein Konto hat keine Admin-Rechte.</Text>
       </View>
     );
   }

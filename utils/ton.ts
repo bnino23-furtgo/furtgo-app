@@ -54,4 +54,6 @@ export const spieleTon = {
   fahrtAbgebrochen: () => { stopAuftrag(); spiele('abgebrochen').catch(() => {}); },
   statusUpdate:     () => spiele('status').catch(() => {}),
   nachricht:        () => spiele('nachricht').catch(() => {}),
+  onlineAn:         () => spiele('angenommen').catch(() => {}),
+  onlineAus:        () => spiele('abgebrochen').catch(() => {}),
 };
