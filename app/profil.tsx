@@ -140,7 +140,9 @@ export default function ProfilScreen() {
         strasse: strasse.trim(),
         ortschaft: ortschaft.trim(),
       }, { merge: true });
-      await setDoc(doc(db, 'fahrer', uid), { name: vollname }, { merge: true });
+      if (istFahrer) {
+        await setDoc(doc(db, 'fahrer', uid), { name: vollname }, { merge: true });
+      }
       Alert.alert(t('profil.gespeichert'), t('profil.datenAktualisiert'));
     } catch (e: any) {
       Alert.alert(t('allgemein.fehler'), e.message ?? t('allgemein.fehler'));
