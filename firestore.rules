@@ -27,6 +27,39 @@ service cloud.firestore {
       match /nachrichten/{nachrichtId} {
         allow read, write: if request.auth != null;
       }
+
+      // ARV 2 Audit-Log: Client darf lesen (nur eigene), schreiben nur Cloud Function
+      match /changes/{changeId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+
+    // ARV 2 Schichten: Fahrer verwaltet eigene, Admin alles
+    match /schichten/{schichtId} {
+      allow read: if request.auth != null
+        && (resource.data.fahrerId == request.auth.uid || istAdmin());
+      allow create: if request.auth != null
+        && (request.resource.data.fahrerId == request.auth.uid || istAdmin());
+      allow update, delete: if request.auth != null
+        && (resource.data.fahrerId == request.auth.uid || istAdmin());
+
+      match /changes/{changeId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+
+    // ARV 2 Online-Events: Fahrer liest eigene, nur Cloud Function schreibt
+    match /fahrer/{userId}/online_events/{eventId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
+      allow write: if false;
+    }
+
+    // ARV 2 Config/Feature-Flags: alle lesen, nur Admin schreiben
+    match /config/{configId} {
+      allow read: if request.auth != null;
+      allow write: if istAdmin();
     }
 
     // Support-Anfragen: nur erstellen, nicht lesen
