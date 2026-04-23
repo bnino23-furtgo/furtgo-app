@@ -50,10 +50,14 @@ service cloud.firestore {
       }
     }
 
-    // ARV 2 Online-Events: Fahrer liest eigene, nur Cloud Function schreibt
+    // ARV 2 Online-Events: Fahrer liest + erstellt eigene, keine Updates/Deletes (Audit-Integritaet)
     match /fahrer/{userId}/online_events/{eventId} {
       allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
-      allow write: if false;
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.istOnline is bool
+        && request.resource.data.keys().hasOnly(['timestamp', 'istOnline', 'standort', 'grund']);
+      allow update, delete: if false;
     }
 
     // ARV 2 Config/Feature-Flags: alle lesen, nur Admin schreiben

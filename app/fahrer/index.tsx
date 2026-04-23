@@ -28,6 +28,7 @@ import {
 import { auth, db } from '@/constants/firebase';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { KoordType } from '@/types';
+import { logOnlineEvent } from '@/utils/arv2';
 import MapComponent from '@/components/MapComponent';
 import { spieleTon } from '@/utils/ton';
 import { formatDistanz } from '@/utils/distanz';
@@ -173,6 +174,7 @@ export default function FahrerDashboard() {
         } else if (data?.online && !darfOnlineBeimLaden) {
           // Altlast: online=true in DB, aber Voraussetzungen fehlen → zurücksetzen
           updateDoc(doc(db, 'fahrer', uid), { online: false }).catch(() => {});
+          logOnlineEvent(uid, false, null, 'auto-pause');
         }
       }).catch((e) => console.log('Fahrer laden Fehler (ignoriert):', e));
     });
@@ -320,6 +322,8 @@ export default function FahrerDashboard() {
       return;
     }
     await setDoc(ref, { name, online: wert, standort: aktuellerStandort, aktiveFahrtId: null, lastSeen: Date.now() }, { merge: true });
+    const uid = auth.currentUser?.uid;
+    if (uid) logOnlineEvent(uid, wert, aktuellerStandort, 'manuell');
 
     if (wert) {
       starteOnlineBetrieb(ref);

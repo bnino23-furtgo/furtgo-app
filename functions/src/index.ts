@@ -42,24 +42,6 @@ export const onSchichtenUpdate = onDocumentUpdated(
   }
 );
 
-export const onFahrerOnlineChange = onDocumentUpdated(
-  { document: 'fahrer/{fahrerId}', region: REGION },
-  async (event) => {
-    const before = event.data?.before.data();
-    const after = event.data?.after.data();
-    if (!before || !after) return;
-    if (before.online === after.online) return;
-    await getFirestore()
-      .collection('fahrer').doc(event.params.fahrerId)
-      .collection('online_events').add({
-        timestamp: FieldValue.serverTimestamp(),
-        istOnline: after.online === true,
-        standort: after.standort ?? null,
-        grund: (after.onlineGrund as string) ?? 'manuell',
-      });
-  }
-);
-
 function diffFields(
   before: Record<string, unknown>,
   after: Record<string, unknown>,
