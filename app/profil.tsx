@@ -28,7 +28,7 @@ import { useTranslation } from 'react-i18next';
 import { supportedLanguages, driverLanguages, changeLanguage } from '@/i18n';
 
 const SUMUP_LINK = 'https://pay.sumup.com/b2c/X8YC4RF074';
-const LEGAL_URL = 'https://bnino23-furtgo.github.io/furtgo-legal';
+const LEGAL_URL = 'https://furtgo.ch/legal.html';
 
 export default function ProfilScreen() {
   const { t, i18n } = useTranslation();

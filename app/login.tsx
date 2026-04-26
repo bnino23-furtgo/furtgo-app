@@ -19,7 +19,7 @@ import { auth, db, storage } from '@/constants/firebase';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 
-const LEGAL_URL = 'https://bnino23-furtgo.github.io/furtgo-legal';
+const LEGAL_URL = 'https://furtgo.ch/legal.html';
 const DOWNLOAD_URL = 'https://furtgo.ch/download/';
 const IST_WEB = Platform.OS === 'web';
 
