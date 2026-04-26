@@ -28,8 +28,15 @@ interface FahrerDaten {
     fuehrerscheinHintenUrl?: string;
     strafregisterUrl?: string;
     strafregisterSauber?: boolean;
-    plattformUrl?: string;
+    uidDokumentUrl?: string;
+    uidNummer?: string;
     eingereichtAm?: number;
+  };
+  fahrzeug?: {
+    schildnummer?: string;
+    marke?: string;
+    jahrgang?: string;
+    farbe?: string;
   };
 }
 
@@ -243,24 +250,37 @@ export default function AdminPanel() {
             </TouchableOpacity>
           </View>
 
+          {f.fahrzeug && (f.fahrzeug.schildnummer || f.fahrzeug.marke || f.fahrzeug.jahrgang || f.fahrzeug.farbe) ? (
+            <View style={styles.dokBox}>
+              <Text style={styles.dokTitel}>Fahrzeug:</Text>
+              {f.fahrzeug.schildnummer ? <Text style={styles.dokZeile}>🔢 Schildnummer: {f.fahrzeug.schildnummer}</Text> : null}
+              {f.fahrzeug.marke ? <Text style={styles.dokZeile}>🚗 Marke/Modell: {f.fahrzeug.marke}</Text> : null}
+              {f.fahrzeug.jahrgang ? <Text style={styles.dokZeile}>📅 Jahrgang: {f.fahrzeug.jahrgang}</Text> : null}
+              {f.fahrzeug.farbe ? <Text style={styles.dokZeile}>🎨 Farbe: {f.fahrzeug.farbe}</Text> : null}
+            </View>
+          ) : null}
+
           {f.dokumente ? (
             <View style={styles.dokBox}>
               <Text style={styles.dokTitel}>Eingereichte Dokumente:</Text>
               <Text style={styles.dokZeile}>
                 🔍 Strafregister: {f.dokumente.strafregisterSauber === true ? '✓ Sauber' : f.dokumente.strafregisterSauber === false ? '✕ Einträge vorhanden' : '–'}
               </Text>
+              {f.dokumente.uidNummer ? (
+                <Text style={styles.dokZeile}>🏢 UID-Nummer: {f.dokumente.uidNummer}</Text>
+              ) : null}
               {f.dokumente.eingereichtAm && (
                 <Text style={styles.dokDatum}>
                   Eingereicht: {new Date(f.dokumente.eingereichtAm).toLocaleDateString('de-CH')}
                 </Text>
               )}
-              {(['fahrzeugausweisUrl', 'fuehrerscheinVorneUrl', 'fuehrerscheinHintenUrl', 'strafregisterUrl', 'plattformUrl'] as const).map((key) => {
+              {(['fahrzeugausweisUrl', 'fuehrerscheinVorneUrl', 'fuehrerscheinHintenUrl', 'strafregisterUrl', 'uidDokumentUrl'] as const).map((key) => {
                 const labels: Record<string, string> = {
                   fahrzeugausweisUrl: '🚗 Fahrzeugausweis',
                   fuehrerscheinVorneUrl: '📋 Führerschein – Vorderseite',
                   fuehrerscheinHintenUrl: '📋 Führerschein – Rückseite',
                   strafregisterUrl: '📄 Strafregisterauszug',
-                  plattformUrl: '📱 Uber/Bolt Screenshot',
+                  uidDokumentUrl: '🏢 UID-/Handelsregister-Bestätigung',
                 };
                 const url = f.dokumente![key];
                 return (
