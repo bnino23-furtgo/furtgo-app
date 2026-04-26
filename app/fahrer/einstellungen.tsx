@@ -39,6 +39,7 @@ export default function FahrerEinstellungen() {
   const { t } = useTranslation();
   const [bildschirmWach, setBildschirmWach] = useState(false);
   const [angebote, setAngebote] = useState<string[]>(['furtgo_mini']);
+  const [freiGrundpreis, setFreiGrundpreis] = useState(5.00);
   const [freiProKm, setFreiProKm] = useState(2.20);
   const [fahrerKat, setFahrerKat] = useState<Kategorie>('furtgo_mini');
 
@@ -68,13 +69,14 @@ export default function FahrerEinstellungen() {
       }
       if (typeof data.freiProKm === 'number') setFreiProKm(data.freiProKm);
       else if (typeof data.eigenProKm === 'number') setFreiProKm(data.eigenProKm);
+      if (typeof data.freiGrundpreis === 'number') setFreiGrundpreis(data.freiGrundpreis);
     }).catch((e) => console.log('Einstellungen laden Fehler (ignoriert):', e));
   }, []);
 
-  const tarifSpeichern = async (neueAngebote: string[], proKm: number) => {
+  const tarifSpeichern = async (neueAngebote: string[], grundpreis: number, proKm: number) => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
-    await setDoc(doc(db, 'fahrer', uid), { angebote: neueAngebote, freiProKm: proKm }, { merge: true }).catch(() => {});
+    await setDoc(doc(db, 'fahrer', uid), { angebote: neueAngebote, freiGrundpreis: grundpreis, freiProKm: proKm }, { merge: true }).catch(() => {});
   };
 
   return (
@@ -142,7 +144,7 @@ export default function FahrerEinstellungen() {
                     neueAngebote = [...angebote, kat];
                   }
                   setAngebote(neueAngebote);
-                  tarifSpeichern(neueAngebote, freiProKm);
+                  tarifSpeichern(neueAngebote, freiGrundpreis, freiProKm);
                 }}
               >
                 <Text style={styles.checkboxIcon}>{aktiv ? '☑' : '☐'}</Text>
@@ -162,55 +164,91 @@ export default function FahrerEinstellungen() {
           {(() => {
             const freiAktiv = angebote.includes('frei');
             return (
-              <TouchableOpacity
-                style={[styles.checkboxRow, freiAktiv && styles.checkboxAktivFrei]}
-                onPress={() => {
-                  let neueAngebote: string[];
-                  if (freiAktiv) {
-                    neueAngebote = angebote.filter((a) => a !== 'frei');
-                    if (neueAngebote.length === 0) return;
-                  } else {
-                    neueAngebote = [...angebote, 'frei'];
-                  }
-                  setAngebote(neueAngebote);
-                  tarifSpeichern(neueAngebote, freiProKm);
-                }}
-              >
-                <Text style={styles.checkboxIcon}>{freiAktiv ? '☑' : '☐'}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.checkboxLabel, freiAktiv && styles.checkboxLabelAktiv]}>
-                    {t('einstellungen.freiWaehlbar')}
-                  </Text>
-                  <Text style={styles.checkboxSub}>
-                    CHF 3.50 + {freiProKm.toFixed(2)}/km
-                  </Text>
-                </View>
+              <View style={[styles.checkboxRowFrei, freiAktiv && styles.checkboxAktivFrei]}>
+                <TouchableOpacity
+                  style={styles.freiHeader}
+                  onPress={() => {
+                    let neueAngebote: string[];
+                    if (freiAktiv) {
+                      neueAngebote = angebote.filter((a) => a !== 'frei');
+                      if (neueAngebote.length === 0) return;
+                    } else {
+                      neueAngebote = [...angebote, 'frei'];
+                    }
+                    setAngebote(neueAngebote);
+                    tarifSpeichern(neueAngebote, freiGrundpreis, freiProKm);
+                  }}
+                >
+                  <Text style={styles.checkboxIcon}>{freiAktiv ? '☑' : '☐'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[styles.checkboxLabel, freiAktiv && styles.checkboxLabelAktiv]}
+                      numberOfLines={1}
+                    >
+                      {t('einstellungen.freiWaehlbar')}
+                    </Text>
+                    <Text style={styles.checkboxSub}>
+                      CHF {freiGrundpreis.toFixed(2)} + {freiProKm.toFixed(2)}/km
+                    </Text>
+                  </View>
+                </TouchableOpacity>
                 {freiAktiv && (
-                  <View style={styles.eigenBtnRow}>
-                    <TouchableOpacity
-                      style={styles.eigenBtn}
-                      onPress={() => {
-                        const neu = Math.max(1.00, Math.round((freiProKm - 0.10) * 100) / 100);
-                        setFreiProKm(neu);
-                        tarifSpeichern(angebote, neu);
-                      }}
-                    >
-                      <Text style={styles.eigenBtnText}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.eigenWert}>{freiProKm.toFixed(2)}</Text>
-                    <TouchableOpacity
-                      style={styles.eigenBtn}
-                      onPress={() => {
-                        const neu = Math.min(9.00, Math.round((freiProKm + 0.10) * 100) / 100);
-                        setFreiProKm(neu);
-                        tarifSpeichern(angebote, neu);
-                      }}
-                    >
-                      <Text style={styles.eigenBtnText}>+</Text>
-                    </TouchableOpacity>
+                  <View style={styles.freiEinstellBlock}>
+                    <View style={styles.freiZeile}>
+                      <Text style={styles.freiZeileLabel}>Grundpreis</Text>
+                      <View style={styles.eigenBtnRow}>
+                        <TouchableOpacity
+                          style={styles.eigenBtn}
+                          onPress={() => {
+                            const neu = Math.max(1.00, Math.round((freiGrundpreis - 0.50) * 100) / 100);
+                            setFreiGrundpreis(neu);
+                            tarifSpeichern(angebote, neu, freiProKm);
+                          }}
+                        >
+                          <Text style={styles.eigenBtnText}>-</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.eigenWert}>{freiGrundpreis.toFixed(2)}</Text>
+                        <TouchableOpacity
+                          style={styles.eigenBtn}
+                          onPress={() => {
+                            const neu = Math.min(20.00, Math.round((freiGrundpreis + 0.50) * 100) / 100);
+                            setFreiGrundpreis(neu);
+                            tarifSpeichern(angebote, neu, freiProKm);
+                          }}
+                        >
+                          <Text style={styles.eigenBtnText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <View style={styles.freiZeile}>
+                      <Text style={styles.freiZeileLabel}>Pro km</Text>
+                      <View style={styles.eigenBtnRow}>
+                        <TouchableOpacity
+                          style={styles.eigenBtn}
+                          onPress={() => {
+                            const neu = Math.max(1.00, Math.round((freiProKm - 0.10) * 100) / 100);
+                            setFreiProKm(neu);
+                            tarifSpeichern(angebote, freiGrundpreis, neu);
+                          }}
+                        >
+                          <Text style={styles.eigenBtnText}>-</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.eigenWert}>{freiProKm.toFixed(2)}</Text>
+                        <TouchableOpacity
+                          style={styles.eigenBtn}
+                          onPress={() => {
+                            const neu = Math.min(9.00, Math.round((freiProKm + 0.10) * 100) / 100);
+                            setFreiProKm(neu);
+                            tarifSpeichern(angebote, freiGrundpreis, neu);
+                          }}
+                        >
+                          <Text style={styles.eigenBtnText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                   </View>
                 )}
-              </TouchableOpacity>
+              </View>
             );
           })()}
         </View>
@@ -271,6 +309,17 @@ const styles = StyleSheet.create({
   checkboxAktivPlus: { borderColor: '#60a5fa', backgroundColor: '#0f1a3e' },
   checkboxAktivLimu: { borderColor: '#a855f7', backgroundColor: '#1a0f2e' },
   checkboxAktivFrei: { borderColor: '#4ade80', backgroundColor: '#0f2d18' },
+  checkboxRowFrei: {
+    backgroundColor: '#0f1a2e',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  freiHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  freiEinstellBlock: { marginTop: 12, gap: 8 },
+  freiZeile: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  freiZeileLabel: { fontSize: 13, color: '#ccc', fontWeight: '600' },
   katInfoBox: {
     backgroundColor: '#0f2035',
     borderRadius: 10,

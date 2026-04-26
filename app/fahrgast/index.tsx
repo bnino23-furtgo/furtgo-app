@@ -153,7 +153,8 @@ export default function FahrgastHaupt() {
           if (fahrerAngebote.includes('furtgo_limu')) hatLimu = true;
           if (fahrerAngebote.includes('frei')) {
             const freiProKm = typeof data.freiProKm === 'number' ? data.freiProKm : (typeof data.eigenProKm === 'number' ? data.eigenProKm : 2.20);
-            const freiPreis = Math.round((3.50 + km * freiProKm) * 100) / 100;
+            const freiGrundpreis = typeof data.freiGrundpreis === 'number' ? data.freiGrundpreis : 5.00;
+            const freiPreis = Math.round((freiGrundpreis + km * freiProKm) * 100) / 100;
             if (dist < freiBesterDist) {
               freiBesterPreis = freiPreis;
               freiBesterFahrerId = d.id;
