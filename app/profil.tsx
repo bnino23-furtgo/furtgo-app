@@ -22,7 +22,7 @@ import {
   signOut,
   deleteUser,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocs, collection, query, where, addDoc } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import { useTranslation } from 'react-i18next';
 import { supportedLanguages, driverLanguages, changeLanguage } from '@/i18n';
@@ -208,16 +208,52 @@ export default function ProfilScreen() {
     if (!uid) return;
     setSupportLaden(true);
     try {
+      const fullName = `${vorname} ${nachname}`.trim();
+      const userEmail = user?.email ?? '';
+      const rolleText = istFahrerRolle ? 'Fahrer' : 'Fahrgast';
+      const thema = supportThema.trim();
+      const nachricht = supportNachricht.trim();
+
       await setDoc(doc(db, 'support_anfragen', `${uid}_${Date.now()}`), {
         uid,
-        email: user?.email ?? '',
-        name: `${vorname} ${nachname}`.trim(),
-        thema: supportThema.trim(),
-        nachricht: supportNachricht.trim(),
+        email: userEmail,
+        name: fullName,
+        thema,
+        nachricht,
         rolle: istFahrerRolle ? 'fahrer' : 'fahrgast',
         erstellt: Date.now(),
         gelesen: false,
       });
+
+      try {
+        const escapeHtml = (s: string) =>
+          s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        await addDoc(collection(db, 'mail'), {
+          to: ['support.furtgo@gmail.com'],
+          replyTo: userEmail || undefined,
+          message: {
+            subject: `Support-Anfrage (${rolleText}): ${thema}`,
+            html: `
+              <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+                <h2 style="margin:0 0 4px;">Furtgo</h2>
+                <p style="color:#666;margin:0 0 20px;font-size:13px;">Support-Anfrage</p>
+                <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
+                <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Name</td><td style="text-align:right;font-size:14px;">${escapeHtml(fullName || '(kein Name)')}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">E-Mail</td><td style="text-align:right;font-size:14px;">${escapeHtml(userEmail || '–')}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Rolle</td><td style="text-align:right;font-size:14px;">${rolleText}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">UID</td><td style="text-align:right;font-size:12px;color:#999;">${uid}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Thema</td><td style="text-align:right;font-size:14px;">${escapeHtml(thema)}</td></tr>
+                </table>
+                <h3 style="margin:0 0 8px;font-size:15px;">Nachricht</h3>
+                <div style="background:#f5f5f5;padding:12px;border-radius:6px;font-size:14px;white-space:pre-wrap;">${escapeHtml(nachricht)}</div>
+              </div>`,
+          },
+        });
+      } catch (mailErr) {
+        console.error('Support-Mail Fehler (ignoriert):', mailErr);
+      }
+
       setSupportModal(false);
       setSupportThema('');
       setSupportNachricht('');
