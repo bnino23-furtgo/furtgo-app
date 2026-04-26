@@ -1,0 +1,33 @@
+{
+  "name": "Furtgo",
+  "short_name": "Furtgo",
+  "description": "Dein Taxi in der Schweiz — ohne Kompromisse.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "lang": "de",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icon-1024.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-1024.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

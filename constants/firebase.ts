@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import { initializeAuth, getAuth, inMemoryPersistence } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 
@@ -12,9 +12,20 @@ const firebaseConfig = {
   appId: '1:522068044243:web:50f7305d3c4c90c99e6726',
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const istNeu = getApps().length === 0;
+const app = istNeu ? initializeApp(firebaseConfig) : getApp();
 
-export const db = getFirestore(app);
+// iOS Safari (PWA) killt WebSocket-Verbindungen — Long-Polling Fallback aktivieren
+// damit onSnapshot-Listener auf iPhone zuverlässig funktionieren.
+let dbInstance;
+try {
+  dbInstance = istNeu
+    ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true })
+    : getFirestore(app);
+} catch {
+  dbInstance = getFirestore(app);
+}
+export const db = dbInstance;
 
 let auth;
 try {

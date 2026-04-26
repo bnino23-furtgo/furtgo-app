@@ -45,8 +45,14 @@
       ]
     },
     "web": {
+      "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "Furtgo",
+      "shortName": "Furtgo",
+      "themeColor": "#1a1a2e",
+      "backgroundColor": "#1a1a2e",
+      "description": "Dein Taxi in der Schweiz — ohne Kompromisse. Fahrer verdienen mehr, Fahrgäste zahlen fair."
     },
     "plugins": [
       "expo-router",

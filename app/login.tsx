@@ -20,6 +20,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 
 const LEGAL_URL = 'https://bnino23-furtgo.github.io/furtgo-legal';
+const DOWNLOAD_URL = 'https://furtgo.ch/download/';
+const IST_WEB = Platform.OS === 'web';
 
 const AKTUELLES_JAHR = new Date().getFullYear();
 
@@ -254,19 +256,28 @@ export default function LoginScreen() {
                   {t('login.fahrgast')}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.rolleBtn, rolle === 'fahrer' && styles.rolleBtnAktivFahrer]}
-                onPress={() => setRolle('fahrer')}
-              >
-                <Text style={styles.rolleBtnIcon}>🚗</Text>
-                <Text style={[styles.rolleBtnText, rolle === 'fahrer' && styles.rolleBtnTextAktiv]}>
-                  {t('login.fahrer')}
-                </Text>
-              </TouchableOpacity>
+              {!IST_WEB && (
+                <TouchableOpacity
+                  style={[styles.rolleBtn, rolle === 'fahrer' && styles.rolleBtnAktivFahrer]}
+                  onPress={() => setRolle('fahrer')}
+                >
+                  <Text style={styles.rolleBtnIcon}>🚗</Text>
+                  <Text style={[styles.rolleBtnText, rolle === 'fahrer' && styles.rolleBtnTextAktiv]}>
+                    {t('login.fahrer')}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
             <Text style={styles.rolleHinweis}>
               {t('login.rolleHinweis')}
             </Text>
+            {IST_WEB && (
+              <TouchableOpacity onPress={() => Linking.openURL(DOWNLOAD_URL)}>
+                <Text style={styles.webFahrerHinweis}>
+                  Du bist Fahrer? Android-App installieren →
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Fahrer-spezifische Felder */}
             {rolle === 'fahrer' && (
@@ -483,6 +494,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     marginTop: -6,
     lineHeight: 15,
+  },
+  webFahrerHinweis: {
+    fontSize: 12,
+    color: '#FFD700',
+    marginBottom: 14,
+    marginTop: -4,
+    textDecorationLine: 'underline',
   },
   sektionLabel: {
     fontSize: 12,

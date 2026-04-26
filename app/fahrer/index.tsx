@@ -89,8 +89,21 @@ export default function FahrerDashboard() {
   const [abmeldenModalSichtbar, setAbmeldenModalSichtbar] = useState(false);
   const [menuOffen, setMenuOffen] = useState(false);
   const [onboardingSichtbar, setOnboardingSichtbar] = useState(false);
+
+  // Fahrer-Rolle ist im Web nicht unterstuetzt (Background-GPS + Notifications in iOS-Safari unzuverlaessig)
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      Alert.alert(
+        'Nur in der App verfügbar',
+        'Die Fahrer-Funktionen benötigen die Android-App. Bitte lade die App herunter.',
+        [{ text: 'OK', onPress: () => router.replace('/login') }]
+      );
+    }
+  }, []);
+
   // Bildschirm-Einstellung beim Start laden
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     AsyncStorage.getItem('bildschirmWach').then((wert) => {
       if (wert === 'true') {
         activateKeepAwakeAsync();
