@@ -168,6 +168,87 @@ export default function AdminPanel() {
     );
   };
 
+  const agbUpdateMailSenden = () => {
+    Alert.alert(
+      'AGB-Update-Mail senden?',
+      'An ALLE registrierten Nutzer wird eine E-Mail über die AGB- und Datenschutz-Aktualisierung verschickt. Diese Aktion kann nicht rückgängig gemacht werden.',
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Senden',
+          onPress: async () => {
+            setLaden(true);
+            try {
+              const escapeHtml = (s: string) =>
+                s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              const snap = await getDocs(collection(db, 'nutzer'));
+              const nutzer = snap.docs
+                .map((d) => ({ id: d.id, ...d.data() } as any))
+                .filter((n) => n.email && typeof n.email === 'string');
+
+              let erfolg = 0;
+              let fehler = 0;
+              for (const n of nutzer) {
+                const name = `${n.vorname ?? ''} ${n.nachname ?? ''}`.trim() || 'Furtgo-Nutzer';
+                const html = `
+                  <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+                    <h2 style="margin:0 0 4px;">Furtgo</h2>
+                    <p style="color:#666;margin:0 0 20px;font-size:13px;">Wichtige Information</p>
+                    <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
+                    <p style="font-size:14px;line-height:1.6;">Hallo ${escapeHtml(name)},</p>
+                    <p style="font-size:14px;line-height:1.6;">
+                      wir haben unsere <strong>Allgemeinen Geschäftsbedingungen</strong>, das <strong>Impressum</strong>
+                      und die <strong>Datenschutzerklärung</strong> aktualisiert (Stand 26. April 2026).
+                    </p>
+                    <p style="font-size:14px;line-height:1.6;">Die wichtigsten Änderungen:</p>
+                    <ul style="font-size:14px;line-height:1.6;">
+                      <li>Neuer Firmenname: Bajic Mobility Solutions</li>
+                      <li>Web-App app.furtgo.ch für Fahrgäste ist live (auf iPhone via Safari «Zum Home-Bildschirm»)</li>
+                      <li>Aktualisierte Tarife und Plattform-Hinweise</li>
+                      <li>Erweiterte Datenschutzerklärung (Audit-Log, neue Subprocessors)</li>
+                      <li>Neuer Disclaimer zu Fahrer-Verantwortung und ARV-2</li>
+                    </ul>
+                    <p style="text-align:center;margin:24px 0;">
+                      <a href="https://furtgo.ch/legal.html" style="background:#FFD700;color:#000;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">Legal-Seite öffnen</a>
+                    </p>
+                    <p style="font-size:13px;color:#666;line-height:1.6;">
+                      Wenn du Furtgo weiter nutzt, gelten die neuen AGB als angenommen. Bei Fragen melde dich gerne bei
+                      <a href="mailto:support.furtgo@gmail.com">support.furtgo@gmail.com</a>.
+                    </p>
+                    <p style="font-size:14px;line-height:1.6;margin-top:20px;">
+                      Bis bald auf der Strasse,<br>
+                      Dein Furtgo-Team
+                    </p>
+                  </div>`;
+                try {
+                  await addDoc(collection(db, 'mail'), {
+                    to: [n.email],
+                    message: {
+                      subject: 'Furtgo: AGB und Datenschutz aktualisiert',
+                      html,
+                    },
+                  });
+                  erfolg++;
+                } catch (e) {
+                  console.error('AGB-Mail Fehler:', n.id, e);
+                  fehler++;
+                }
+              }
+              setLaden(false);
+              Alert.alert(
+                'Versand abgeschlossen',
+                `${erfolg} Mails initiiert, ${fehler} Fehler.\n\nDie Trigger-Email-Extension verschickt sie nun via Gmail SMTP (kann ein paar Minuten dauern).`
+              );
+            } catch (e: any) {
+              setLaden(false);
+              Alert.alert('Fehler', e?.message ?? 'Unbekannter Fehler beim Lesen der Nutzer-Liste');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const aboVerlaengern = async (fahrerId: string) => {
     const f = fahrer.find((x) => x.id === fahrerId);
     const basis = f?.aboGueltigBis && f.aboGueltigBis > Date.now() ? f.aboGueltigBis : Date.now();
@@ -214,6 +295,10 @@ export default function AdminPanel() {
 
       <TouchableOpacity style={styles.loeschenAlleBtn} onPress={alleAbgelehntenLoeschen}>
         <Text style={styles.loeschenAlleText}>🗑  Alle abgelehnten löschen</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.agbMailBtn} onPress={agbUpdateMailSenden}>
+        <Text style={styles.agbMailText}>📧  AGB-Update-Mail an alle senden</Text>
       </TouchableOpacity>
 
       {laden && <ActivityIndicator color="#FFD700" style={{ marginTop: 20 }} />}
@@ -468,5 +553,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loeschenAlleText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  agbMailBtn: {
+    backgroundColor: '#1e3a5f',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  agbMailText: { color: '#FFD700', fontSize: 14, fontWeight: 'bold' },
   btnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 });
