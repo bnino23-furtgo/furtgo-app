@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
   warteText: { color: '#aaa', textAlign: 'center', fontSize: 11, marginBottom: 4 },
   sosBtn: {
     position: 'absolute',
-    bottom: 28,
+    bottom: Platform.OS === 'android' ? 52 : 28,
     right: 14,
     backgroundColor: '#e53e3e',
     borderRadius: 22,
@@ -854,7 +854,13 @@ const styles = StyleSheet.create({
   sosBtnText: { fontSize: 18 },
   sosBtnLabel: { fontSize: 9, color: '#fff', fontWeight: 'bold', marginTop: -2 },
 
-  karteContainer: { flex: 1, borderRadius: 14, overflow: 'hidden', minHeight: 160 },
+  karteContainer: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    minHeight: 160,
+    marginBottom: Platform.OS === 'android' ? 24 : 0,
+  },
 
   modalKategorieBadge: {
     flexDirection: 'row',

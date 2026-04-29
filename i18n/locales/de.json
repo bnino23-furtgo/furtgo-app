@@ -187,17 +187,19 @@
   },
   "verlauf": {
     "titel": "Fahrtverlauf",
+    "heute": "Heute",
     "dieseWoche": "Diese Woche",
     "dieserMonat": "Dieser Monat",
-    "alle": "Alle",
+    "diesesJahr": "Dieses Jahr",
     "fahrt": "Fahrt",
     "einnahmen": "Einnahmen",
     "ausgaben": "Ausgaben",
     "abgeschlossen": "Abgeschlossen",
     "abgebrochen": "Abgebrochen",
+    "keineHeute": "Keine Fahrten heute",
     "keineWoche": "Keine Fahrten diese Woche",
     "keineMonat": "Keine Fahrten diesen Monat",
-    "keineAlle": "Noch keine abgeschlossenen Fahrten",
+    "keineJahr": "Keine Fahrten dieses Jahr",
     "betrag": "Betrag"
   },
   "quittung": {

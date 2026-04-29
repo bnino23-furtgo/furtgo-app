@@ -12,7 +12,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import { useTranslation } from 'react-i18next';
 
-type FilterTyp = 'woche' | 'monat' | 'alle';
+type FilterTyp = 'tag' | 'woche' | 'monat' | 'jahr';
 
 interface FahrtEintrag {
   id: string;
@@ -29,7 +29,7 @@ export default function Verlauf() {
   const { rolle } = useLocalSearchParams<{ rolle: string }>();
   const [fahrten, setFahrten] = useState<FahrtEintrag[]>([]);
   const [laden, setLaden] = useState(true);
-  const [filter, setFilter] = useState<FilterTyp>('monat');
+  const [filter, setFilter] = useState<FilterTyp>('tag');
 
   useEffect(() => {
     const uid = auth.currentUser?.uid;
@@ -65,6 +65,11 @@ export default function Verlauf() {
 
   const gefilterteFahrten = useMemo(() => {
     const jetzt = new Date();
+    if (filter === 'tag') {
+      const tagesStart = new Date(jetzt);
+      tagesStart.setHours(0, 0, 0, 0);
+      return fahrten.filter((f) => f.datum >= tagesStart);
+    }
     if (filter === 'woche') {
       const wochenStart = new Date(jetzt);
       wochenStart.setHours(0, 0, 0, 0);
@@ -75,7 +80,8 @@ export default function Verlauf() {
       const monatsStart = new Date(jetzt.getFullYear(), jetzt.getMonth(), 1);
       return fahrten.filter((f) => f.datum >= monatsStart);
     }
-    return fahrten;
+    const jahrStart = new Date(jetzt.getFullYear(), 0, 1);
+    return fahrten.filter((f) => f.datum >= jahrStart);
   }, [fahrten, filter]);
 
   const zusammenfassung = useMemo(() => {
@@ -102,9 +108,10 @@ export default function Verlauf() {
   };
 
   const filterLabel: Record<FilterTyp, string> = {
+    tag: t('verlauf.heute'),
     woche: t('verlauf.dieseWoche'),
     monat: t('verlauf.dieserMonat'),
-    alle: t('verlauf.alle'),
+    jahr: t('verlauf.diesesJahr'),
   };
 
   return (
@@ -119,7 +126,7 @@ export default function Verlauf() {
 
       {/* Filter-Tabs */}
       <View style={styles.tabs}>
-        {(['woche', 'monat', 'alle'] as FilterTyp[]).map((f) => (
+        {(['tag', 'woche', 'monat', 'jahr'] as FilterTyp[]).map((f) => (
           <TouchableOpacity
             key={f}
             style={[styles.tab, filter === f && styles.tabAktiv]}
@@ -159,11 +166,13 @@ export default function Verlauf() {
         <View style={styles.leer}>
           <Text style={styles.leerIcon}>🚗</Text>
           <Text style={styles.leerText}>
-            {filter === 'woche'
+            {filter === 'tag'
+              ? t('verlauf.keineHeute')
+              : filter === 'woche'
               ? t('verlauf.keineWoche')
               : filter === 'monat'
               ? t('verlauf.keineMonat')
-              : t('verlauf.keineAlle')}
+              : t('verlauf.keineJahr')}
           </Text>
         </View>
       ) : (

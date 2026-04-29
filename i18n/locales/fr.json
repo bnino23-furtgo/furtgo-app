@@ -185,17 +185,19 @@
   },
   "verlauf": {
     "titel": "Historique des courses",
+    "heute": "Aujourd'hui",
     "dieseWoche": "Cette semaine",
     "dieserMonat": "Ce mois",
-    "alle": "Tout",
+    "diesesJahr": "Cette année",
     "fahrt": "Course",
     "einnahmen": "Revenus",
     "ausgaben": "Dépenses",
     "abgeschlossen": "Terminée",
     "abgebrochen": "Annulée",
+    "keineHeute": "Aucune course aujourd'hui",
     "keineWoche": "Aucune course cette semaine",
     "keineMonat": "Aucune course ce mois",
-    "keineAlle": "Aucune course terminée",
+    "keineJahr": "Aucune course cette année",
     "betrag": "Montant"
   },
   "quittung": {

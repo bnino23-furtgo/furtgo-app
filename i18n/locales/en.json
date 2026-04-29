@@ -187,17 +187,19 @@
   },
   "verlauf": {
     "titel": "Ride History",
+    "heute": "Today",
     "dieseWoche": "This Week",
     "dieserMonat": "This Month",
-    "alle": "All",
+    "diesesJahr": "This year",
     "fahrt": "Ride",
     "einnahmen": "Earnings",
     "ausgaben": "Expenses",
     "abgeschlossen": "Completed",
     "abgebrochen": "Cancelled",
+    "keineHeute": "No trips today",
     "keineWoche": "No rides this week",
     "keineMonat": "No rides this month",
-    "keineAlle": "No completed rides yet",
+    "keineJahr": "No trips this year",
     "betrag": "Amount"
   },
   "quittung": {
