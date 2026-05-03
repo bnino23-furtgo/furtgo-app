@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.floatingbubble'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.floatingbubble"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  api "androidx.core:core-ktx:1.12.0"
+  api "androidx.lifecycle:lifecycle-process:2.6.2"
+}

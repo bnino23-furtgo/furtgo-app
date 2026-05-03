@@ -1,0 +1,7 @@
+{
+  "name": "floating-bubble",
+  "version": "0.1.0",
+  "description": "Furtgo Floating Bubble (Bolt-style) — Android overlay bubble while driver is online",
+  "main": "src/index.ts",
+  "private": true
+}
