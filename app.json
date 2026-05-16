@@ -16,6 +16,7 @@
     },
     "android": {
       "package": "com.nino.furtgo",
+      "googleServicesFile": "./google-services.json",
       "notification": {
         "icon": "./assets/images/android-icon-monochrome.png",
         "color": "#1a1a2e"
@@ -41,7 +42,11 @@
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {

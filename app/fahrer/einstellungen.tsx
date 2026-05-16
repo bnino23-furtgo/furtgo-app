@@ -6,13 +6,26 @@ import {
   StyleSheet,
   ScrollView,
   Switch,
+  Linking,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/constants/firebase';
+import { doc, getDoc, setDoc, onSnapshot, Timestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from '@/constants/firebase';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+
+type AboStatus = 'aktiv' | 'fehlgeschlagen' | 'pending' | 'inaktiv' | 'gekuendigt';
+
+interface AboDaten {
+  status?: AboStatus;
+  nextChargeAt?: Timestamp;
+  cancelledAt?: Timestamp;
+  pendingTransactionId?: number;
+}
 
 type Kategorie = 'furtgo_mini' | 'furtgo_plus' | 'furtgo_limu';
 const TARIFE: Record<Kategorie, { grundpreis: number; proKm: number; label: string }> = {
@@ -42,6 +55,81 @@ export default function FahrerEinstellungen() {
   const [freiGrundpreis, setFreiGrundpreis] = useState(5.00);
   const [freiProKm, setFreiProKm] = useState(2.20);
   const [fahrerKat, setFahrerKat] = useState<Kategorie>('furtgo_mini');
+  const [abo, setAbo] = useState<AboDaten>({});
+  const [aboLaedt, setAboLaedt] = useState(false);
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const unsub = onSnapshot(doc(db, 'fahrer', uid), (snap) => {
+      const data = snap.data();
+      setAbo((data?.abo ?? {}) as AboDaten);
+    });
+    return unsub;
+  }, []);
+
+  const aboStarten = async () => {
+    setAboLaedt(true);
+    try {
+      const callable = httpsCallable<unknown, { paymentUrl: string; transactionId: number }>(
+        functions,
+        'createAboPaymentPage',
+      );
+      const result = await callable({});
+      const url = result.data.paymentUrl;
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Fehler', 'Browser konnte nicht geöffnet werden');
+      }
+    } catch (e) {
+      console.log('Abo-Start Fehler:', e);
+      Alert.alert('Fehler', 'Abo-Seite konnte nicht erstellt werden. Bitte später erneut versuchen.');
+    } finally {
+      setAboLaedt(false);
+    }
+  };
+
+  const aboKuendigen = () => {
+    const bisDatum = abo.nextChargeAt?.toDate().toLocaleDateString('de-CH') ?? '—';
+    Alert.alert(
+      'Abo kündigen?',
+      `Du behältst vollen Zugang bis ${bisDatum}. Danach läuft das Abo aus und es wird nichts mehr abgebucht.`,
+      [
+        { text: 'Abbrechen', style: 'cancel' },
+        {
+          text: 'Ja, kündigen',
+          style: 'destructive',
+          onPress: async () => {
+            setAboLaedt(true);
+            try {
+              const callable = httpsCallable(functions, 'cancelAbo');
+              await callable({});
+            } catch (e) {
+              console.log('Kündigung Fehler:', e);
+              Alert.alert('Fehler', 'Kündigung konnte nicht durchgeführt werden. Bitte später erneut versuchen.');
+            } finally {
+              setAboLaedt(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const aboReaktivieren = async () => {
+    setAboLaedt(true);
+    try {
+      const callable = httpsCallable(functions, 'reactivateAbo');
+      await callable({});
+    } catch (e) {
+      console.log('Reaktivierung Fehler:', e);
+      Alert.alert('Fehler', 'Abo konnte nicht reaktiviert werden. Bitte später erneut versuchen.');
+    } finally {
+      setAboLaedt(false);
+    }
+  };
 
   useEffect(() => {
     // Bildschirm-Einstellung laden
@@ -112,6 +200,94 @@ export default function FahrerEinstellungen() {
             thumbColor="#fff"
           />
         </View>
+      </View>
+
+      {/* Fahrer-Abo */}
+      <View style={styles.sektion}>
+        <Text style={styles.sektionTitel}>Fahrer-Abo</Text>
+        <Text style={styles.sektionSub}>CHF 60.- pro Monat — automatische Belastung alle 30 Tage</Text>
+
+        {abo.status === 'aktiv' && (
+          <>
+            <View style={[styles.aboStatusBox, styles.aboStatusAktiv]}>
+              <Text style={styles.aboStatusLabel}>✓ Abo aktiv</Text>
+              {abo.nextChargeAt && (
+                <Text style={styles.aboStatusSub}>
+                  Nächste Belastung: {abo.nextChargeAt.toDate().toLocaleDateString('de-CH')}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.aboKuendigenBtn, aboLaedt && styles.aboBtnDisabled]}
+              onPress={aboKuendigen}
+              disabled={aboLaedt}
+            >
+              {aboLaedt ? (
+                <ActivityIndicator color="#ff6b6b" />
+              ) : (
+                <Text style={styles.aboKuendigenBtnText}>Abo kündigen</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        {abo.status === 'gekuendigt' && (
+          <>
+            <View style={[styles.aboStatusBox, styles.aboStatusGekuendigt]}>
+              <Text style={styles.aboStatusLabel}>⏳ Abo gekündigt</Text>
+              {abo.nextChargeAt && (
+                <Text style={styles.aboStatusSub}>
+                  Zugang läuft noch bis: {abo.nextChargeAt.toDate().toLocaleDateString('de-CH')}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.aboBtn, aboLaedt && styles.aboBtnDisabled]}
+              onPress={aboReaktivieren}
+              disabled={aboLaedt}
+            >
+              {aboLaedt ? (
+                <ActivityIndicator color="#000" />
+              ) : (
+                <Text style={styles.aboBtnText}>Abo reaktivieren</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
+
+        {abo.status === 'fehlgeschlagen' && (
+          <View style={[styles.aboStatusBox, styles.aboStatusFehler]}>
+            <Text style={styles.aboStatusLabel}>✕ Letzte Zahlung fehlgeschlagen</Text>
+            <Text style={styles.aboStatusSub}>Bitte erneut starten</Text>
+          </View>
+        )}
+
+        {(!abo.status || abo.status === 'inaktiv' || abo.status === 'fehlgeschlagen') && (
+          <TouchableOpacity
+            style={[styles.aboBtn, aboLaedt && styles.aboBtnDisabled]}
+            onPress={aboStarten}
+            disabled={aboLaedt}
+          >
+            {aboLaedt ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <Text style={styles.aboBtnText}>
+                {abo.status === 'fehlgeschlagen' ? 'Abo erneut starten' : 'Abo abschliessen'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {abo.pendingTransactionId && !abo.status && (
+          <Text style={styles.aboStatusSub}>Zahlung läuft… Status aktualisiert sich automatisch.</Text>
+        )}
+
+        <TouchableOpacity
+          style={styles.rechnungenLink}
+          onPress={() => router.push('/fahrer/rechnungen')}
+        >
+          <Text style={styles.rechnungenLinkText}>Meine Rechnungen anzeigen →</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Mein Angebot */}
@@ -331,6 +507,41 @@ const styles = StyleSheet.create({
   },
   katInfoLabel: { color: '#aaa', fontSize: 13 },
   katInfoWert: { color: '#FFD700', fontSize: 14, fontWeight: 'bold' },
+
+  aboStatusBox: {
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+  },
+  aboStatusAktiv: { backgroundColor: '#0f2d18', borderColor: '#4ade80' },
+  aboStatusFehler: { backgroundColor: '#2d0f0f', borderColor: '#ff6b6b' },
+  aboStatusGekuendigt: { backgroundColor: '#2d2008', borderColor: '#fbbf24' },
+  aboStatusLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  aboStatusSub: { color: '#aaa', fontSize: 12, marginTop: 4 },
+  aboBtn: {
+    backgroundColor: '#FFD700',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  aboBtnDisabled: { opacity: 0.5 },
+  aboBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
+  aboKuendigenBtn: {
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#ff6b6b',
+  },
+  aboKuendigenBtnText: { color: '#ff6b6b', fontSize: 13, fontWeight: '600' },
+  rechnungenLink: { marginTop: 12, paddingVertical: 8, alignItems: 'center' },
+  rechnungenLinkText: { color: '#FFD700', fontSize: 13, fontWeight: '600' },
+
   checkboxIcon: { fontSize: 20, color: '#fff' },
   checkboxLabel: { fontSize: 14, color: '#888', fontWeight: '600' },
   checkboxLabelAktiv: { color: '#fff' },

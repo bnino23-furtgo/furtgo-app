@@ -235,7 +235,15 @@ export default function LoginScreen() {
             </View>
           ))}
           <View style={styles.logoSide} />
-          <Image source={require('@/assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+          <Image
+            source={
+              isRegistrierung && rolle === 'fahrgast'
+                ? require('@/assets/images/icon-fahrgast.png')
+                : require('@/assets/images/icon.png')
+            }
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <View style={styles.logoSide} />
         </View>
         <Text style={styles.untertitel}>

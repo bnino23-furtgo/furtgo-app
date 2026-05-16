@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgFahrgast" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0A0827"/>
+      <stop offset="100%" stop-color="#2929D6"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bgFahrgast)"/>
+
+  <!-- Rolle oben in gelb, kompakt — schmaler als "Furtgo" -->
+  <text x="256" y="250"
+        text-anchor="middle"
+        font-family="Helvetica, Arial, 'Helvetica Neue', sans-serif"
+        font-size="34"
+        font-weight="600"
+        fill="#E8A50C"
+        letter-spacing="6">FAHRGAST</text>
+
+  <!-- Schriftzug Furtgo -->
+  <text x="256" y="330"
+        text-anchor="middle"
+        font-family="Helvetica, Arial, 'Helvetica Neue', sans-serif"
+        font-size="100"
+        font-weight="800"
+        fill="#FFFFFF"
+        letter-spacing="-3">Furtgo</text>
+</svg>

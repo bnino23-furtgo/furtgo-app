@@ -9,6 +9,7 @@ import {
   Linking,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { collection, addDoc, serverTimestamp, getDoc, getDocs, onSnapshot, query, where, doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
@@ -36,6 +37,7 @@ type AngebotInfo = {
 
 export default function FahrgastHaupt() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const [standort, setStandort] = useState<KoordType | null>(null);
   const [abholOrt, setAbholOrt] = useState<OrtType | null>(null);
   const [zielOrt, setZielOrt] = useState<OrtType | null>(null);
@@ -133,13 +135,15 @@ export default function FahrgastHaupt() {
         fahrerSnap.forEach((d) => {
           const data = d.data();
           const lastSeen = typeof data.lastSeen === 'number' ? data.lastSeen : 0;
-          if (jetzt - lastSeen > 30000) {
+          // 3min Toleranz: Android drosselt JS im Background (zb wenn Bubble läuft),
+          // dadurch fallen lastSeen-Updates aus. FCM-Push erreicht den Fahrer trotzdem.
+          if (jetzt - lastSeen > 180000) {
             updateDoc(doc(db, 'fahrer', d.id), { online: false }).catch(() => {});
             return;
           }
           if (!data.standort?.latitude) return;
           const dist = berechneKm(startOrt, data.standort);
-          if (dist > 10) return;
+          if (dist > 15) return;
 
           let fahrerAngebote: string[] = [];
           if (Array.isArray(data.angebote) && data.angebote.length > 0) {
@@ -237,13 +241,13 @@ export default function FahrgastHaupt() {
       fahrerSnap.forEach((d) => {
         const data = d.data();
         const lastSeen = typeof data.lastSeen === 'number' ? data.lastSeen : 0;
-        if (jetzt - lastSeen > 30000) {
+        if (jetzt - lastSeen > 180000) {
           updateDoc(doc(db, 'fahrer', d.id), { online: false }).catch(() => {});
           return;
         }
         if (!data.standort?.latitude) return;
         const dist = berechneKm(startOrt, data.standort);
-        if (dist > 10) return;
+        if (dist > 15) return;
 
         // Angebote lesen
         let fahrerAngebote: string[] = [];
@@ -498,7 +502,7 @@ export default function FahrgastHaupt() {
       </View>
 
       {/* SOS */}
-      <TouchableOpacity style={styles.sosBtn} onPress={sosAnrufen}>
+      <TouchableOpacity style={[styles.sosBtn, { bottom: insets.bottom + 16 }]} onPress={sosAnrufen}>
         <Text style={styles.sosBtnText}>{'🆘'}</Text>
         <Text style={styles.sosBtnLabel}>SOS</Text>
       </TouchableOpacity>
@@ -620,7 +624,6 @@ const styles = StyleSheet.create({
   standortText: { fontSize: 11, color: '#aaa' },
   sosBtn: {
     position: 'absolute',
-    bottom: 28,
     right: 14,
     backgroundColor: '#e53e3e',
     borderRadius: 22,

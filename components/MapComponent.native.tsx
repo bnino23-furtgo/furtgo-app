@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { Ionicons } from '@expo/vector-icons';
 import { KoordType } from '@/types';
 
 interface Props {
   standort?: KoordType | null;
   zielOrt?: (KoordType & { adresse?: string }) | null;
   fahrerStandort?: KoordType | null;
+  standortAlsLogo?: boolean;
 }
 
 const ZUERICH = {
@@ -34,7 +36,7 @@ async function fetchRoute(von: KoordType, nach: KoordType): Promise<KoordType[]>
   return [];
 }
 
-export default function MapComponent({ standort, zielOrt, fahrerStandort }: Props) {
+export default function MapComponent({ standort, zielOrt, fahrerStandort, standortAlsLogo }: Props) {
   const [route, setRoute] = useState<KoordType[]>([]);
   const mapRef = useRef<MapView>(null);
   const letztesZielRef = useRef<string>('');
@@ -87,7 +89,15 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort }: Prop
       showsMyLocationButton
     >
       {standort && (
-        <Marker coordinate={standort} title="Dein Standort" pinColor="blue" />
+        standortAlsLogo ? (
+          <Marker coordinate={standort} title="Dein Standort" anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={styles.logoMarker}>
+              <Ionicons name="car-sport" size={20} color="#1a1a2e" />
+            </View>
+          </Marker>
+        ) : (
+          <Marker coordinate={standort} title="Dein Standort" pinColor="blue" />
+        )
       )}
       {zielOrt && (
         <Marker coordinate={zielOrt} title="Ziel" pinColor="red" />
@@ -108,4 +118,18 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort }: Prop
 
 const styles = StyleSheet.create({
   map: { width: '100%', height: '100%' },
+  logoMarker: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFD700',
+    borderWidth: 3,
+    borderColor: '#1e3a8a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
 });

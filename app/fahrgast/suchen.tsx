@@ -52,7 +52,7 @@ export default function FahrerSuchen() {
               if (abgelehntVon.includes(d.id)) return;
               const fData = d.data();
               const lastSeen = typeof fData.lastSeen === 'number' ? fData.lastSeen : 0;
-              if (jetzt - lastSeen > 30000) return;
+              if (jetzt - lastSeen > 180000) return;
               if (fData.standort?.latitude) {
                 const dist = berechneKm(data.abholort, fData.standort);
                 if (dist <= 10) {

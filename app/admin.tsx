@@ -40,9 +40,25 @@ interface FahrerDaten {
   };
 }
 
+interface FahrgastDaten {
+  id: string;
+  vorname?: string;
+  nachname?: string;
+  email?: string;
+  telefon?: string;
+  strasse?: string;
+  ortschaft?: string;
+  erstelltAm?: number;
+  ausweisUrl?: string;
+  rolle?: string;
+  istAdmin?: boolean;
+  istFahrer?: boolean;
+}
+
 export default function AdminPanel() {
   const [istAdmin, setIstAdmin] = useState<boolean | null>(null);
   const [fahrer, setFahrer] = useState<FahrerDaten[]>([]);
+  const [fahrgaeste, setFahrgaeste] = useState<FahrgastDaten[]>([]);
   const [laden, setLaden] = useState(false);
 
   useEffect(() => {
@@ -53,7 +69,10 @@ export default function AdminPanel() {
         const snap = await getDoc(doc(db, 'nutzer', uid));
         const ok = snap.data()?.istAdmin === true;
         setIstAdmin(ok);
-        if (ok) fahrerLaden();
+        if (ok) {
+          fahrerLaden();
+          fahrgaesteLaden();
+        }
       } catch {
         setIstAdmin(false);
       }
@@ -71,6 +90,24 @@ export default function AdminPanel() {
     } finally {
       setLaden(false);
     }
+  };
+
+  const fahrgaesteLaden = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'nutzer'));
+      const liste: FahrgastDaten[] = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as FahrgastDaten))
+        .filter((n) => n.istFahrer !== true && n.istAdmin !== true && n.rolle !== 'fahrer')
+        .sort((a, b) => (b.erstelltAm ?? 0) - (a.erstelltAm ?? 0));
+      setFahrgaeste(liste);
+    } catch (e) {
+      console.log('Admin Fahrgaeste laden Fehler (ignoriert):', e);
+    }
+  };
+
+  const allesLaden = () => {
+    fahrerLaden();
+    fahrgaesteLaden();
   };
 
   const verifizierenSetzen = async (fahrerId: string, status: string) => {
@@ -285,13 +322,13 @@ export default function AdminPanel() {
         <TouchableOpacity onPress={() => router.back()} style={styles.zurueckBtnInline}>
           <Text style={styles.zurueckPfeil}>&#x2039;</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={fahrerLaden}>
+        <TouchableOpacity onPress={allesLaden}>
           <Text style={styles.refreshText}>↻ Aktualisieren</Text>
         </TouchableOpacity>
       </View>
 
       <Text style={styles.titel}>Admin-Panel</Text>
-      <Text style={styles.sub}>{fahrer.length} Fahrer registriert</Text>
+      <Text style={styles.sub}>{fahrer.length} Fahrer · {fahrgaeste.length} Fahrgäste</Text>
 
       <TouchableOpacity style={styles.loeschenAlleBtn} onPress={alleAbgelehntenLoeschen}>
         <Text style={styles.loeschenAlleText}>🗑  Alle abgelehnten löschen</Text>
@@ -427,6 +464,49 @@ export default function AdminPanel() {
           </View>
         </View>
       ))}
+
+      {/* Fahrgäste-Sektion */}
+      <Text style={styles.sektionTitel}>Registrierte Fahrgäste ({fahrgaeste.length})</Text>
+      {fahrgaeste.length === 0 && !laden && (
+        <Text style={styles.keineDok}>Noch keine Fahrgäste registriert.</Text>
+      )}
+      {fahrgaeste.map((g) => {
+        const vollname = `${g.vorname ?? ''} ${g.nachname ?? ''}`.trim() || '(kein Name)';
+        return (
+          <View key={g.id} style={styles.fahrerCard}>
+            <View style={styles.fahrerHeader}>
+              <Text style={styles.fahrerName}>{vollname}</Text>
+              <View style={styles.badges}>
+                <Text style={styles.badgeBlau}>Fahrgast</Text>
+              </View>
+            </View>
+            <Text style={styles.fahrerId}>ID: {g.id.slice(0, 12)}…</Text>
+            <View style={styles.dokBox}>
+              {g.email ? <Text style={styles.dokZeile}>📧 {g.email}</Text> : null}
+              {g.telefon ? <Text style={styles.dokZeile}>📞 {g.telefon}</Text> : null}
+              {(g.strasse || g.ortschaft) ? (
+                <Text style={styles.dokZeile}>🏠 {[g.strasse, g.ortschaft].filter(Boolean).join(', ')}</Text>
+              ) : null}
+              {g.erstelltAm ? (
+                <Text style={styles.dokDatum}>
+                  Registriert: {new Date(g.erstelltAm).toLocaleDateString('de-CH')}
+                </Text>
+              ) : null}
+              {g.ausweisUrl ? (
+                <View style={styles.fotoSektion}>
+                  <Text style={styles.fotoLabel}>🪪 Ausweis</Text>
+                  <TouchableOpacity onPress={() => Linking.openURL(g.ausweisUrl!)}>
+                    <Image source={{ uri: g.ausweisUrl }} style={styles.dokFoto} />
+                    <Text style={styles.fotoOeffnen}>Vollbild öffnen</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={styles.keineFoto}>Kein Ausweis hochgeladen</Text>
+              )}
+            </View>
+          </View>
+        );
+      })}
     </ScrollView>
   );
 }
@@ -514,6 +594,8 @@ const styles = StyleSheet.create({
   badgeGruen: { fontSize: 11, color: '#4ade80', fontWeight: '700' },
   badgeGelb: { fontSize: 11, color: '#FFD700', fontWeight: '700' },
   badgeRot: { fontSize: 11, color: '#f87171', fontWeight: '700' },
+  badgeBlau: { fontSize: 11, color: '#60a5fa', fontWeight: '700' },
+  sektionTitel: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginTop: 28, marginBottom: 12 },
   fahrerId: { fontSize: 11, color: '#555', marginBottom: 10 },
 
   dokBox: {

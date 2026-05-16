@@ -36,7 +36,7 @@ async function spieleAuftrag() {
         try { player.pause(); player.remove(); } catch {}
         auftragPlayer = null;
       }
-    }, 5100);
+    }, 20100);
   } catch {}
 }
 
