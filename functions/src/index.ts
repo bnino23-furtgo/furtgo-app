@@ -1,10 +1,86 @@
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { logger } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 initializeApp();
 
+export { createAboPaymentPage, pfcWebhook, chargeMonthlySubscriptions, cancelAbo, reactivateAbo } from './pfcAbo';
+
 const REGION = 'europe-west6';
+
+async function sendeFahrerPush(fahrerId: string, fahrtId: string, fahrtData: Record<string, unknown>): Promise<void> {
+  const fahrerSnap = await getFirestore().collection('fahrer').doc(fahrerId).get();
+  const fahrerData = fahrerSnap.data();
+  if (!fahrerData?.online) {
+    logger.info(`Fahrer ${fahrerId} ist offline — kein Push`);
+    return;
+  }
+  const lastSeen = typeof fahrerData.lastSeen === 'number' ? fahrerData.lastSeen : 0;
+  // 3min Toleranz: im Bubble-Modus drosselt Android JS, lastSeen-Updates fallen aus.
+  // FCM-Push kommt durch Doze hindurch, also Fahrer kann trotzdem reagieren.
+  if (Date.now() - lastSeen > 180000) {
+    logger.info(`Fahrer ${fahrerId} lastSeen veraltet — kein Push`);
+    return;
+  }
+  const pushToken = fahrerData.pushToken as string | undefined;
+  if (!pushToken) {
+    logger.warn(`Kein Push-Token fuer Fahrer ${fahrerId}`);
+    return;
+  }
+
+  const ziel = (fahrtData.zielort as Record<string, unknown> | undefined)?.adresse;
+  const zielText = typeof ziel === 'string' ? ziel : 'Unbekannt';
+
+  const message = {
+    to: pushToken,
+    sound: 'default',
+    priority: 'high',
+    channelId: 'fahrtanfragen_v3',
+    title: '🔔 Neue Fahrtanfrage!',
+    body: `Ziel: ${zielText}`,
+    data: { fahrtId },
+  };
+
+  try {
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+    const result = await response.json();
+    logger.info(`Push an Fahrer ${fahrerId} fuer Fahrt ${fahrtId}:`, result);
+  } catch (e) {
+    logger.error(`Push-Fehler fuer Fahrer ${fahrerId}:`, e);
+  }
+}
+
+export const onFahrtZugewiesen = onDocumentUpdated(
+  { document: 'fahrten/{fahrtId}', region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+    const neuerFahrer = after.zugewiesenerFahrerId as string | undefined;
+    const alterFahrer = before.zugewiesenerFahrerId as string | undefined;
+    if (!neuerFahrer || neuerFahrer === alterFahrer) return;
+    await sendeFahrerPush(neuerFahrer, event.params.fahrtId, after);
+  }
+);
+
+export const onFahrtErstellt = onDocumentCreated(
+  { document: 'fahrten/{fahrtId}', region: REGION },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    const fahrerId = data.zugewiesenerFahrerId as string | undefined;
+    if (!fahrerId) return;
+    await sendeFahrerPush(fahrerId, event.params.fahrtId, data);
+  }
+);
 
 export const onFahrtenUpdate = onDocumentUpdated(
   { document: 'fahrten/{fahrtId}', region: REGION },

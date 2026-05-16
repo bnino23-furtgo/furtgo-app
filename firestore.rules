@@ -50,6 +50,12 @@ service cloud.firestore {
       }
     }
 
+    // Rechnungen: Fahrer liest eigene (Cloud Function schreibt)
+    match /fahrer/{userId}/rechnungen/{rechnungsNr} {
+      allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
+      allow write: if false;
+    }
+
     // ARV 2 Online-Events: Fahrer liest + erstellt eigene, keine Updates/Deletes (Audit-Integritaet)
     match /fahrer/{userId}/online_events/{eventId} {
       allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
