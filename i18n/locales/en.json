@@ -86,6 +86,10 @@
     "bubblePermissionText": "So you don't miss any rides, Furtgo can show a small bubble over your other apps. Furtgo needs a special permission for this.",
     "bubblePermissionErlauben": "Allow",
     "bubblePermissionSpaeter": "Later",
+    "battOptTitel": "Disable battery optimization",
+    "battOptText": "To keep the Furtgo bubble and ride notifications reliable during your shift, battery optimization should be disabled for Furtgo. Otherwise Android (especially Xiaomi, Huawei, Samsung) can kill the app in the background.",
+    "battOptErlauben": "Set up now",
+    "battOptSpaeter": "Later",
     "nichtBereitTitel": "You cannot go online yet",
     "nichtBereitText": "Please complete all steps before going online.",
     "schrittDokumente": "Documents uploaded",
@@ -186,6 +190,7 @@
     "loeschen": "Delete",
     "erneutAnmelden": "Log in again",
     "erneutAnmeldenText": "Please log out and log in again, then try again.",
+    "hilfe": "Help",
     "impressum": "Imprint",
     "datenschutz": "Privacy Policy"
   },

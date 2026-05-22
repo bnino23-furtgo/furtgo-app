@@ -86,6 +86,10 @@
     "bubblePermissionText": "Damit du Aufträge nicht verpasst, kann Furtgo eine kleine Bubble über deinen anderen Apps anzeigen. Dafür braucht Furtgo eine spezielle Erlaubnis.",
     "bubblePermissionErlauben": "Erlauben",
     "bubblePermissionSpaeter": "Später",
+    "battOptTitel": "Akku-Optimierung deaktivieren",
+    "battOptText": "Damit die Furtgo-Bubble und Auftragsbenachrichtigungen während der Schicht zuverlässig laufen, sollte die Akku-Optimierung für Furtgo deaktiviert werden. Sonst kann Android (besonders Xiaomi, Huawei, Samsung) die App im Hintergrund killen.",
+    "battOptErlauben": "Jetzt einrichten",
+    "battOptSpaeter": "Später",
     "nichtBereitTitel": "Du kannst noch nicht online gehen",
     "nichtBereitText": "Bitte schliesse zuerst alle Schritte ab, bevor du online gehst.",
     "schrittDokumente": "Dokumente hochgeladen",
@@ -186,6 +190,7 @@
     "loeschen": "Löschen",
     "erneutAnmelden": "Erneut anmelden",
     "erneutAnmeldenText": "Bitte melde dich ab und wieder an, dann versuche es erneut.",
+    "hilfe": "Hilfe",
     "impressum": "Impressum",
     "datenschutz": "Datenschutz"
   },

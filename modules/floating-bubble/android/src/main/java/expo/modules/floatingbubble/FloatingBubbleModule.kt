@@ -33,6 +33,14 @@ class FloatingBubbleModule : Module() {
     Function("isRunning") {
       FloatingBubbleService.isRunning
     }
+
+    Function("isBatteryOptimizationIgnored") {
+      BatteryOptimizationHelper.isIgnored(context())
+    }
+
+    AsyncFunction("requestIgnoreBatteryOptimization") {
+      BatteryOptimizationHelper.requestIgnore(context())
+    }
   }
 
   private fun context() =

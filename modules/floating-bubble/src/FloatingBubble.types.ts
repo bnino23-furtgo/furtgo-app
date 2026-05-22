@@ -8,4 +8,6 @@ export interface FloatingBubbleAPI {
   start(options?: FloatingBubbleStartOptions): Promise<void>;
   stop(): Promise<void>;
   isRunning(): boolean;
+  isBatteryOptimizationIgnored(): boolean;
+  requestIgnoreBatteryOptimization(): Promise<void>;
 }

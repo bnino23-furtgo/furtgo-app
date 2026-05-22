@@ -33,7 +33,7 @@ import { KoordType } from '@/types';
 import { logOnlineEvent } from '@/utils/arv2';
 import MapComponent from '@/components/MapComponent';
 import { spieleTon } from '@/utils/ton';
-import { formatDistanz } from '@/utils/distanz';
+import { berechneKm, formatDistanz } from '@/utils/distanz';
 import Constants from 'expo-constants';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -147,6 +147,8 @@ export default function FahrerDashboard() {
   const anfrageRef = useRef<any>(null);
   const onlineNotifIdRef = useRef<string | null>(null);
   const bubblePermissionDeclinedRef = useRef(false);
+  const battOptDeclinedRef = useRef(false);
+  const letzterGeschriebenerStandortRef = useRef<KoordType | null>(null);
 
   // Durchschnittsbewertung laden und in Firestore speichern
   useEffect(() => {
@@ -260,7 +262,10 @@ export default function FahrerDashboard() {
           const fRef = doc(db, 'fahrer', uid);
           // lastSeen sofort aktualisieren, damit Fahrgast den Fahrer nicht als Geist filtert
           standortAktualisieren().then((loc) => {
-            if (loc) updateDoc(fRef, { standort: loc, lastSeen: Date.now() }).catch(() => {});
+            if (loc) {
+              updateDoc(fRef, { standort: loc, lastSeen: Date.now() }).catch(() => {});
+              letzterGeschriebenerStandortRef.current = loc;
+            }
           });
           starteOnlineBetrieb(fRef);
         } else if (data?.online && !darfOnlineBeimLaden) {
@@ -308,7 +313,16 @@ export default function FahrerDashboard() {
       try {
         if (!auth.currentUser) return;
         const loc = await standortAktualisieren();
-        if (loc) await updateDoc(ref, { standort: loc, lastSeen: Date.now() });
+        if (!loc) return;
+        const letzter = letzterGeschriebenerStandortRef.current;
+        const bewegungM = letzter ? berechneKm(letzter, loc) * 1000 : Infinity;
+        if (bewegungM < 30) {
+          // Stationär (parkiert/wartet): nur lastSeen — spart Akku + Firestore-Writes
+          await updateDoc(ref, { lastSeen: Date.now() });
+        } else {
+          await updateDoc(ref, { standort: loc, lastSeen: Date.now() });
+          letzterGeschriebenerStandortRef.current = loc;
+        }
       } catch (e) {
         console.log('Standort-Update Fehler (ignoriert):', e);
       }
@@ -421,6 +435,7 @@ export default function FahrerDashboard() {
       // langsamer Call (GPS) wartet. Sonst sieht DB/CloudFn noch online:true und
       // schickt Fahrtangebote in dem Zeitfenster.
       stoppeOnlineBetrieb();
+      letzterGeschriebenerStandortRef.current = null;
       await setDoc(ref, { online: false, aktiveFahrtId: null, lastSeen: Date.now() }, { merge: true });
       const uidOff = auth.currentUser?.uid;
       if (uidOff) logOnlineEvent(uidOff, false, null, 'manuell');
@@ -450,6 +465,7 @@ export default function FahrerDashboard() {
     }
     try {
       await setDoc(ref, { name, online: true, standort: aktuellerStandort, aktiveFahrtId: null, lastSeen: Date.now() }, { merge: true });
+      letzterGeschriebenerStandortRef.current = aktuellerStandort;
       console.log('ONLINE-SCHALTEN: setDoc(online:true) erfolgreich');
     } catch (e: any) {
       console.error('Firestore-Schreibfehler:', e?.message ?? e);
@@ -490,6 +506,25 @@ export default function FahrerDashboard() {
             {
               text: t('fahrer.bubblePermissionErlauben'),
               onPress: () => { FloatingBubble.requestPermission().catch(() => {}); },
+            },
+          ]
+        );
+      }
+
+      // Akku-Optimierung deaktivieren (verhindert dass MIUI/EMUI/OneUI die Bubble killen)
+      if (!FloatingBubble.isBatteryOptimizationIgnored() && !battOptDeclinedRef.current) {
+        Alert.alert(
+          t('fahrer.battOptTitel'),
+          t('fahrer.battOptText'),
+          [
+            {
+              text: t('fahrer.battOptSpaeter'),
+              style: 'cancel',
+              onPress: () => { battOptDeclinedRef.current = true; },
+            },
+            {
+              text: t('fahrer.battOptErlauben'),
+              onPress: () => { FloatingBubble.requestIgnoreBatteryOptimization().catch(() => {}); },
             },
           ]
         );

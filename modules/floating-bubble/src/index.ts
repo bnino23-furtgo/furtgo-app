@@ -10,6 +10,8 @@ const noop: FloatingBubbleAPI = {
   start: async (_options?: FloatingBubbleStartOptions) => {},
   stop: async () => {},
   isRunning: () => false,
+  isBatteryOptimizationIgnored: () => true,
+  requestIgnoreBatteryOptimization: async () => {},
 };
 
 const FloatingBubble: FloatingBubbleAPI =
@@ -20,6 +22,8 @@ const FloatingBubble: FloatingBubbleAPI =
         start: (options?: FloatingBubbleStartOptions) => native.start(options ?? {}),
         stop: () => native.stop(),
         isRunning: () => Boolean(native.isRunning()),
+        isBatteryOptimizationIgnored: () => Boolean(native.isBatteryOptimizationIgnored()),
+        requestIgnoreBatteryOptimization: () => native.requestIgnoreBatteryOptimization(),
       }
     : noop;
 

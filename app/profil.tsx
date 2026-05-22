@@ -29,6 +29,7 @@ import { supportedLanguages, driverLanguages, changeLanguage } from '@/i18n';
 
 const SUMUP_LINK = 'https://pay.sumup.com/b2c/X8YC4RF074';
 const LEGAL_URL = 'https://furtgo.ch/legal.html';
+const HILFE_URL = 'https://furtgo.ch/hilfe.html';
 
 export default function ProfilScreen() {
   const { t, i18n } = useTranslation();
@@ -499,6 +500,10 @@ export default function ProfilScreen() {
         </TouchableOpacity>
 
         <View style={styles.rechtlichesRow}>
+          <TouchableOpacity onPress={() => Linking.openURL(HILFE_URL)}>
+            <Text style={styles.rechtlichesLink}>{t('profil.hilfe')}</Text>
+          </TouchableOpacity>
+          <Text style={styles.rechtlichesTrenner}>·</Text>
           <TouchableOpacity onPress={() => Linking.openURL(`${LEGAL_URL}#impressum`)}>
             <Text style={styles.rechtlichesLink}>{t('profil.impressum')}</Text>
           </TouchableOpacity>

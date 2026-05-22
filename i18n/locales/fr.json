@@ -84,6 +84,10 @@
     "bubblePermissionText": "Pour ne manquer aucune course, Furtgo peut afficher une petite bulle au-dessus de tes autres apps. Furtgo a besoin d'une autorisation spéciale pour cela.",
     "bubblePermissionErlauben": "Autoriser",
     "bubblePermissionSpaeter": "Plus tard",
+    "battOptTitel": "Désactiver l'optimisation de la batterie",
+    "battOptText": "Pour que la bulle Furtgo et les notifications de course restent fiables pendant la garde, l'optimisation de la batterie doit être désactivée pour Furtgo. Sinon Android (surtout Xiaomi, Huawei, Samsung) peut tuer l'app en arrière-plan.",
+    "battOptErlauben": "Configurer maintenant",
+    "battOptSpaeter": "Plus tard",
     "nichtBereitTitel": "Vous ne pouvez pas encore passer en ligne",
     "nichtBereitText": "Veuillez compléter toutes les étapes avant de passer en ligne.",
     "schrittDokumente": "Documents téléchargés",
@@ -184,6 +188,7 @@
     "loeschen": "Supprimer",
     "erneutAnmelden": "Se reconnecter",
     "erneutAnmeldenText": "Veuillez vous déconnecter et vous reconnecter, puis réessayez.",
+    "hilfe": "Aide",
     "impressum": "Mentions légales",
     "datenschutz": "Confidentialité"
   },
