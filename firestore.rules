@@ -88,5 +88,10 @@ service cloud.firestore {
     match /admin/{document} {
       allow read, write: if false;
     }
+
+    // Webhook-Events: nur Cloud Function (Admin SDK bypasst Rules)
+    match /webhook_events/{eventId} {
+      allow read, write: if false;
+    }
   }
 }

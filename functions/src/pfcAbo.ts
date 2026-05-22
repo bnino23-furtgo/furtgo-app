@@ -60,10 +60,16 @@ async function sendAboPush(uid: string, title: string, body: string): Promise<vo
   }
 }
 
-async function handleRecurringFailure(uid: string, reason: string): Promise<void> {
+async function handleRecurringFailure(uid: string, reason: string, txId?: number): Promise<void> {
   const fahrerRef = getFirestore().collection('fahrer').doc(uid);
   const snap = await fahrerRef.get();
-  const aboData = snap.data()?.abo as { retryCount?: number } | undefined;
+  const aboData = snap.data()?.abo as { retryCount?: number; lastFailedTxId?: number } | undefined;
+
+  if (txId && aboData?.lastFailedTxId === txId) {
+    logger.info(`handleRecurringFailure: tx ${txId} fuer Fahrer ${uid} bereits verarbeitet — uebersprungen`);
+    return;
+  }
+
   const currentRetry = aboData?.retryCount ?? 0;
   const nextRetry = currentRetry + 1;
 
@@ -73,6 +79,7 @@ async function handleRecurringFailure(uid: string, reason: string): Promise<void
         abo: {
           status: 'fehlgeschlagen',
           retryCount: 0,
+          ...(txId ? { lastFailedTxId: txId } : {}),
           updatedAt: FieldValue.serverTimestamp(),
         },
       },
@@ -95,6 +102,7 @@ async function handleRecurringFailure(uid: string, reason: string): Promise<void
         retryCount: nextRetry,
         nextChargeAt,
         lastRetryReason: reason,
+        ...(txId ? { lastFailedTxId: txId } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       },
     },
@@ -382,6 +390,24 @@ export const pfcWebhook = onRequest(
       authKey,
     );
 
+    const eventId = `${txId}_${tx.state}`;
+    const eventRef = getFirestore().collection('webhook_events').doc(eventId);
+    try {
+      await eventRef.create({
+        txId,
+        state: tx.state,
+        receivedAt: FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      const code = (e as { code?: number | string }).code;
+      if (code === 6 || code === 'already-exists') {
+        logger.info(`Webhook event ${eventId} bereits verarbeitet — ignoriere Retry`);
+        res.status(200).send('Already processed');
+        return;
+      }
+      throw e;
+    }
+
     const fahrerUid = tx.metaData?.fahrer_uid ?? tx.customerId;
     if (!fahrerUid) {
       logger.warn(`Keine fahrer_uid in Transaktion ${txId}`);
@@ -426,7 +452,7 @@ export const pfcWebhook = onRequest(
     } else if (tx.state === 'FAILED' || tx.state === 'DECLINE') {
       const isRecurring = tx.metaData?.typ === 'recurring';
       if (isRecurring) {
-        await handleRecurringFailure(fahrerUid, `tx ${txId} state ${tx.state}`);
+        await handleRecurringFailure(fahrerUid, `tx ${txId} state ${tx.state}`, txId);
       } else {
         await fahrerRef.set(
           {
@@ -476,6 +502,18 @@ export const chargeMonthlySubscriptions = onSchedule(
         logger.warn(`Fahrer ${uid} hat keinen pfcTokenId — ueberspringe`);
         continue;
       }
+
+      const softLockUntil = Timestamp.fromMillis(Date.now() + 86400 * 1000);
+      await getFirestore().collection('fahrer').doc(uid).set(
+        {
+          abo: {
+            nextChargeAt: softLockUntil,
+            lastChargeAttemptAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+        },
+        { merge: true },
+      );
 
       try {
         const tx = await pfcRequest<PfcTransaction>(

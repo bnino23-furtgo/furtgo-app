@@ -148,6 +148,18 @@ export async function createRechnung(params: {
   betrag: number;
   gmailPassword: string;
 }): Promise<void> {
+  const existing = await getFirestore()
+    .collection('fahrer').doc(params.fahrerUid)
+    .collection('rechnungen')
+    .where('pfcTxId', '==', params.pfcTxId)
+    .limit(1)
+    .get();
+  if (!existing.empty) {
+    const existingNr = existing.docs[0].id;
+    logger.info(`createRechnung: Rechnung ${existingNr} fuer pfcTxId=${params.pfcTxId} existiert bereits — uebersprungen`);
+    return;
+  }
+
   const fahrerSnap = await getFirestore().collection('fahrer').doc(params.fahrerUid).get();
   const fahrerData = fahrerSnap.data();
   if (!fahrerData) {

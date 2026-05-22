@@ -46,3 +46,6 @@ app-example
 service-account.json/
 google-services.json
 GoogleService-Info.plist
+
+# Lokale Ops-Tools (nicht committen)
+scripts/reset-test-abo.js
