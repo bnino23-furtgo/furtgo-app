@@ -287,5 +287,18 @@
     "unbekannt": "Unbekannt",
     "sos": "SOS",
     "sprache": "Sprache"
+  },
+  "schicht": {
+    "titel": "Schicht-Übersicht",
+    "heute": "Heute",
+    "gestern": "Gestern",
+    "anzahlFahrten": "Fahrten",
+    "umsatz": "Umsatz",
+    "lenkzeit": "Lenkzeit",
+    "arbeitszeit": "Arbeitszeit",
+    "geschaetzt": "(geschätzt)",
+    "fahrten": "Fahrten heute",
+    "keineFahrten": "Keine abgeschlossenen Fahrten an diesem Tag.",
+    "disclaimer": "Diese Übersicht ist ein Hilfsmittel und ersetzt nicht das gesetzlich vorgeschriebene Arbeitsbuch bzw. die zertifizierte ARV-2-App. Du bleibst für die korrekte Aufzeichnung deiner Arbeitszeit selbst verantwortlich."
   }
 }

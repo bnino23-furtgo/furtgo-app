@@ -113,6 +113,23 @@ export default function FahrerDashboard() {
   const [abmeldenModalSichtbar, setAbmeldenModalSichtbar] = useState(false);
   const [menuOffen, setMenuOffen] = useState(false);
   const [onboardingSichtbar, setOnboardingSichtbar] = useState(false);
+  const [arv2Aktiv, setArv2Aktiv] = useState(false);
+
+  // Feature-Flag: ARV-2 Schicht-Helper (nur für Test-Fahrer sichtbar)
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) { setArv2Aktiv(false); return; }
+      getDoc(doc(db, 'config', 'features'))
+        .then((snap) => {
+          const data = snap.data();
+          const aktiv = data?.arv2Enabled === true && Array.isArray(data?.arv2TestFahrerIds)
+            && data.arv2TestFahrerIds.includes(user.uid);
+          setArv2Aktiv(!!aktiv);
+        })
+        .catch(() => {});
+    });
+    return () => unsub();
+  }, []);
 
   // Fahrer-Rolle ist im Web nicht unterstuetzt (Background-GPS + Notifications in iOS-Safari unzuverlaessig)
   useEffect(() => {
@@ -666,6 +683,12 @@ export default function FahrerDashboard() {
             <Text style={styles.menuItemIcon}>📋</Text>
             <Text style={styles.menuItemText}>{t('verlauf.titel')}</Text>
           </TouchableOpacity>
+          {arv2Aktiv && (
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOffen(false); router.push('/fahrer/schicht' as any); }}>
+              <Text style={styles.menuItemIcon}>📊</Text>
+              <Text style={styles.menuItemText}>{t('schicht.titel')}</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuOffen(false); router.push('/fahrer/einstellungen' as any); }}>
             <Text style={styles.menuItemIcon}>⚙️</Text>
             <Text style={styles.menuItemText}>{t('einstellungen.titel')}</Text>

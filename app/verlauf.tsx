@@ -6,13 +6,15 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import { useTranslation } from 'react-i18next';
 
-type FilterTyp = 'tag' | 'woche' | 'monat' | 'jahr';
+type FilterTyp = 'tag' | 'woche' | 'monat';
+const MONATE = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
 interface FahrtEintrag {
   id: string;
@@ -30,6 +32,7 @@ export default function Verlauf() {
   const [fahrten, setFahrten] = useState<FahrtEintrag[]>([]);
   const [laden, setLaden] = useState(true);
   const [filter, setFilter] = useState<FilterTyp>('tag');
+  const [monatIndex, setMonatIndex] = useState<number>(new Date().getMonth());
 
   useEffect(() => {
     const uid = auth.currentUser?.uid;
@@ -76,13 +79,11 @@ export default function Verlauf() {
       wochenStart.setDate(jetzt.getDate() - ((jetzt.getDay() + 6) % 7)); // Montag
       return fahrten.filter((f) => f.datum >= wochenStart);
     }
-    if (filter === 'monat') {
-      const monatsStart = new Date(jetzt.getFullYear(), jetzt.getMonth(), 1);
-      return fahrten.filter((f) => f.datum >= monatsStart);
-    }
-    const jahrStart = new Date(jetzt.getFullYear(), 0, 1);
-    return fahrten.filter((f) => f.datum >= jahrStart);
-  }, [fahrten, filter]);
+    // monat
+    const von = new Date(jetzt.getFullYear(), monatIndex, 1);
+    const bis = new Date(jetzt.getFullYear(), monatIndex + 1, 1);
+    return fahrten.filter((f) => f.datum >= von && f.datum < bis);
+  }, [fahrten, filter, monatIndex]);
 
   const zusammenfassung = useMemo(() => {
     const abgeschlossen = gefilterteFahrten.filter((f) => f.status === 'abgeschlossen');
@@ -107,11 +108,9 @@ export default function Verlauf() {
     }
   };
 
-  const filterLabel: Record<FilterTyp, string> = {
+  const filterLabel: Record<'tag' | 'woche', string> = {
     tag: t('verlauf.heute'),
     woche: t('verlauf.dieseWoche'),
-    monat: t('verlauf.dieserMonat'),
-    jahr: t('verlauf.diesesJahr'),
   };
 
   return (
@@ -124,9 +123,9 @@ export default function Verlauf() {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Filter-Tabs */}
+      {/* Filter-Tabs: Heute / Diese Woche */}
       <View style={styles.tabs}>
-        {(['tag', 'woche', 'monat', 'jahr'] as FilterTyp[]).map((f) => (
+        {(['tag', 'woche'] as const).map((f) => (
           <TouchableOpacity
             key={f}
             style={[styles.tab, filter === f && styles.tabAktiv]}
@@ -138,6 +137,27 @@ export default function Verlauf() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Monats-Tabs (horizontal scroll) */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.monateScrollView}
+        contentContainerStyle={styles.monateLeiste}
+      >
+        {MONATE.map((name, i) => {
+          const aktiv = filter === 'monat' && monatIndex === i;
+          return (
+            <TouchableOpacity
+              key={i}
+              style={[styles.monatTab, aktiv && styles.tabAktiv]}
+              onPress={() => { setFilter('monat'); setMonatIndex(i); }}
+            >
+              <Text style={[styles.monatTabText, aktiv && styles.tabTextAktiv]}>{name}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {/* Zusammenfassung */}
       {!laden && zusammenfassung.anzahl > 0 && (
@@ -170,9 +190,7 @@ export default function Verlauf() {
               ? t('verlauf.keineHeute')
               : filter === 'woche'
               ? t('verlauf.keineWoche')
-              : filter === 'monat'
-              ? t('verlauf.keineMonat')
-              : t('verlauf.keineJahr')}
+              : t('verlauf.keineMonat')}
           </Text>
         </View>
       ) : (
@@ -257,6 +275,20 @@ const styles = StyleSheet.create({
   tabAktiv: { backgroundColor: '#FFD700' },
   tabText: { fontSize: 12, color: '#aaa', fontWeight: '600' },
   tabTextAktiv: { color: '#000' },
+
+  monateScrollView: { flexGrow: 0, flexShrink: 0, marginBottom: 8 },
+  monateLeiste: {
+    paddingHorizontal: 16,
+    gap: 6,
+    alignItems: 'center',
+  },
+  monatTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 9,
+    backgroundColor: '#16213e',
+  },
+  monatTabText: { fontSize: 12, color: '#aaa', fontWeight: '600' },
 
   zusammenfassung: {
     flexDirection: 'row',
