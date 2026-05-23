@@ -118,6 +118,29 @@ export const onSchichtenUpdate = onDocumentUpdated(
   }
 );
 
+// ARV-2: protokolliert Online/Offline-Wechsel als Events fuer Arbeitszeit-Berechnung
+export const onFahrerOnlineChange = onDocumentUpdated(
+  { document: 'fahrer/{uid}', region: REGION },
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+    if (before.online === after.online) return;
+    const eintrag: Record<string, unknown> = {
+      timestamp: FieldValue.serverTimestamp(),
+      istOnline: !!after.online,
+      grund: 'manuell',
+    };
+    const standort = after.standort as Record<string, unknown> | undefined;
+    if (standort && typeof standort.latitude === 'number' && typeof standort.longitude === 'number') {
+      eintrag.standort = { latitude: standort.latitude, longitude: standort.longitude };
+    }
+    await getFirestore()
+      .collection('fahrer').doc(event.params.uid)
+      .collection('online_events').add(eintrag);
+  }
+);
+
 function diffFields(
   before: Record<string, unknown>,
   after: Record<string, unknown>,

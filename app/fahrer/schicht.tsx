@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -22,6 +22,11 @@ interface FahrtZeile {
   preis: number;
   abhol: string;
   ziel: string;
+}
+
+interface OnlineEvent {
+  timestamp: Date;
+  istOnline: boolean;
 }
 
 const MAX_TAGE_ZURUECK = 28;
@@ -79,6 +84,7 @@ export default function Schicht() {
   const insets = useSafeAreaInsets();
   const [datum, setDatum] = useState<Date>(tagesStart(new Date()));
   const [fahrten, setFahrten] = useState<FahrtZeile[]>([]);
+  const [onlineEvents, setOnlineEvents] = useState<OnlineEvent[]>([]);
   const [laden, setLaden] = useState(true);
 
   const heute = useMemo(() => tagesStart(new Date()), []);
@@ -99,11 +105,17 @@ export default function Schicht() {
     const von = tagesStart(datum);
     const bis = tagesEnde(datum);
 
-    const q = query(collection(db, 'fahrten'), where('fahrerId', '==', uid));
+    const fahrtenQ = query(collection(db, 'fahrten'), where('fahrerId', '==', uid));
+    const eventsQ = query(
+      collection(doc(db, 'fahrer', uid), 'online_events'),
+      where('timestamp', '>=', von),
+      where('timestamp', '<=', bis),
+      orderBy('timestamp', 'asc')
+    );
 
-    getDocs(q)
-      .then((snap) => {
-        const liste: FahrtZeile[] = snap.docs
+    Promise.all([getDocs(fahrtenQ), getDocs(eventsQ)])
+      .then(([fSnap, eSnap]) => {
+        const liste: FahrtZeile[] = fSnap.docs
           .filter((d) => d.data().status === 'abgeschlossen')
           .map((d) => {
             const data = d.data();
@@ -123,6 +135,12 @@ export default function Schicht() {
           .filter((f) => f.start >= von && f.start <= bis)
           .sort((a, b) => a.start.getTime() - b.start.getTime());
         setFahrten(liste);
+
+        const events: OnlineEvent[] = eSnap.docs.map((d) => ({
+          timestamp: toDate(d.data().timestamp),
+          istOnline: !!d.data().istOnline,
+        }));
+        setOnlineEvents(events);
       })
       .catch((e) => console.log('Schicht laden Fehler (ignoriert):', e))
       .finally(() => setLaden(false));
@@ -131,14 +149,41 @@ export default function Schicht() {
   const summen = useMemo(() => {
     const lenkzeitMin = fahrten.reduce((s, f) => s + f.dauerMin, 0);
     const umsatz = fahrten.reduce((s, f) => s + f.preis, 0);
+
     let arbeitszeitMin = 0;
-    if (fahrten.length > 0) {
+    let geschaetzt = false;
+    const istHeute = tagesStart(datum).getTime() === tagesStart(new Date()).getTime();
+
+    if (onlineEvents.length > 0) {
+      // Echte Berechnung aus Online-Events
+      const events: OnlineEvent[] = [...onlineEvents];
+      if (!events[0].istOnline) {
+        // Tag startete bereits online → virtueller Online-Event bei Tagesanfang
+        events.unshift({ timestamp: tagesStart(datum), istOnline: true });
+      }
+      let aktuelleStart: Date | null = null;
+      for (const ev of events) {
+        if (ev.istOnline && !aktuelleStart) {
+          aktuelleStart = ev.timestamp;
+        } else if (!ev.istOnline && aktuelleStart) {
+          arbeitszeitMin += Math.round((ev.timestamp.getTime() - aktuelleStart.getTime()) / 60000);
+          aktuelleStart = null;
+        }
+      }
+      if (aktuelleStart) {
+        const ende = istHeute ? new Date() : tagesEnde(datum);
+        arbeitszeitMin += Math.round((ende.getTime() - aktuelleStart.getTime()) / 60000);
+      }
+    } else if (fahrten.length > 0) {
+      // Fallback: erste→letzte Fahrt, geschätzt
       const erste = fahrten[0].start;
       const letzte = fahrten[fahrten.length - 1].ende;
       arbeitszeitMin = Math.max(0, Math.round((letzte.getTime() - erste.getTime()) / 60000));
+      geschaetzt = true;
     }
-    return { lenkzeitMin, arbeitszeitMin, umsatz, anzahl: fahrten.length };
-  }, [fahrten]);
+
+    return { lenkzeitMin, arbeitszeitMin, umsatz, anzahl: fahrten.length, geschaetzt };
+  }, [fahrten, onlineEvents, datum]);
 
   const tagWechsel = (tage: number) => {
     const neu = new Date(datum);
@@ -207,7 +252,8 @@ export default function Schicht() {
               </View>
               <View style={styles.kachel}>
                 <Text style={styles.kachelLabel}>
-                  {t('schicht.arbeitszeit')} <Text style={styles.kachelHinweis}>{t('schicht.geschaetzt')}</Text>
+                  {t('schicht.arbeitszeit')}
+                  {summen.geschaetzt && <Text style={styles.kachelHinweis}> {t('schicht.geschaetzt')}</Text>}
                 </Text>
                 <Text style={styles.kachelWert}>{formatDauer(summen.arbeitszeitMin)}</Text>
               </View>
