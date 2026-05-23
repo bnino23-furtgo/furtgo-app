@@ -678,8 +678,8 @@ export default function FahrerDashboard() {
         </View>
       )}
 
-      {standort && online && (
-        <View style={[styles.karteContainer, { marginBottom: insets.bottom }]}>
+      {online && (
+        <View style={styles.karteContainer}>
           <MapComponent standort={standort} standortAlsLogo />
         </View>
       )}

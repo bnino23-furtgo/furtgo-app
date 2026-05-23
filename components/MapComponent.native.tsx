@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KoordType } from '@/types';
 
 interface Props {
@@ -41,6 +42,7 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort, stando
   const mapRef = useRef<MapView>(null);
   const letztesZielRef = useRef<string>('');
   const ersteFitRef = useRef(false);
+  const insets = useSafeAreaInsets();
 
   const region = standort
     ? {
@@ -79,14 +81,25 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort, stando
     }
   }, [route]);
 
+  const aufStandortZentrieren = () => {
+    if (!standort || !mapRef.current) return;
+    mapRef.current.animateToRegion({
+      latitude: standort.latitude,
+      longitude: standort.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    }, 500);
+  };
+
   return (
+    <View style={styles.container}>
     <MapView
       ref={mapRef}
       style={styles.map}
       provider={PROVIDER_GOOGLE}
       initialRegion={region}
       showsUserLocation={!standort}
-      showsMyLocationButton
+      showsMyLocationButton={false}
     >
       {standort && (
         standortAlsLogo ? (
@@ -113,11 +126,36 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort, stando
         />
       )}
     </MapView>
+    {standort && (
+      <TouchableOpacity
+        style={[styles.zentrierBtn, { bottom: insets.bottom + 16 }]}
+        onPress={aufStandortZentrieren}
+        accessibilityLabel="Auf meinen Standort zentrieren"
+      >
+        <Ionicons name="locate" size={22} color="#1a1a2e" />
+      </TouchableOpacity>
+    )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: { flex: 1 },
   map: { width: '100%', height: '100%' },
+  zentrierBtn: {
+    position: 'absolute',
+    left: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFD700',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 5,
+  },
   logoMarker: {
     width: 34,
     height: 34,
