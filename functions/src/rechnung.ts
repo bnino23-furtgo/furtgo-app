@@ -50,7 +50,8 @@ function generateRechnungPDF(params: {
   periode: string;
   fahrer: FahrerInfo;
   betrag: number;
-  pfcTxId: number;
+  paymentRef: string;
+  zahlungsArt: string;
 }): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
@@ -103,7 +104,7 @@ function generateRechnungPDF(params: {
     const FULL_WIDTH = 500;
     doc.fontSize(9).fillColor('#666');
     doc.text('Nicht MwSt-pflichtig — keine MwSt ausgewiesen (Art. 10 Abs. 2 MWSTG).', 50, footerStartY, { width: FULL_WIDTH });
-    doc.text(`Bereits bezahlt via PostFinance Checkout (Transaktion #${params.pfcTxId}).`, 50, footerStartY + 18, { width: FULL_WIDTH });
+    doc.text(`Bereits bezahlt via ${params.zahlungsArt} (Referenz ${params.paymentRef}).`, 50, footerStartY + 18, { width: FULL_WIDTH });
     doc.text('Vielen Dank für deine Treue. Bei Fragen erreichst du uns unter support.furtgo@gmail.com.', 50, footerStartY + 36, { width: FULL_WIDTH });
 
     doc.end();
@@ -114,6 +115,7 @@ async function sendRechnungEmail(params: {
   toEmail: string;
   toName: string;
   rechnungsNr: string;
+  zahlungsArt: string;
   pdfBuffer: Buffer;
   gmailPassword: string;
 }): Promise<void> {
@@ -131,7 +133,7 @@ async function sendRechnungEmail(params: {
     from: `"Furtgo" <${ABSENDER_EMAIL}>`,
     to: params.toEmail,
     subject: `Furtgo Rechnung ${params.rechnungsNr}`,
-    text: `Hallo ${params.toName},\n\nim Anhang findest du deine Rechnung ${params.rechnungsNr} für dein Furtgo Fahrer-Abo.\n\nDie Zahlung ist bereits via PostFinance Checkout verbucht.\n\nGute Fahrt!\nFurtgo`,
+    text: `Hallo ${params.toName},\n\nim Anhang findest du deine Rechnung ${params.rechnungsNr} für dein Furtgo Fahrer-Abo.\n\nDie Zahlung ist bereits via ${params.zahlungsArt} verbucht.\n\nGute Fahrt!\nFurtgo`,
     attachments: [
       {
         filename: `${params.rechnungsNr}.pdf`,
@@ -144,19 +146,20 @@ async function sendRechnungEmail(params: {
 
 export async function createRechnung(params: {
   fahrerUid: string;
-  pfcTxId: number;
+  paymentRef: string;
+  zahlungsArt: string;
   betrag: number;
   gmailPassword: string;
 }): Promise<void> {
   const existing = await getFirestore()
     .collection('fahrer').doc(params.fahrerUid)
     .collection('rechnungen')
-    .where('pfcTxId', '==', params.pfcTxId)
+    .where('paymentRef', '==', params.paymentRef)
     .limit(1)
     .get();
   if (!existing.empty) {
     const existingNr = existing.docs[0].id;
-    logger.info(`createRechnung: Rechnung ${existingNr} fuer pfcTxId=${params.pfcTxId} existiert bereits — uebersprungen`);
+    logger.info(`createRechnung: Rechnung ${existingNr} fuer paymentRef=${params.paymentRef} existiert bereits — uebersprungen`);
     return;
   }
 
@@ -204,7 +207,8 @@ export async function createRechnung(params: {
     periode,
     fahrer: fahrerInfo,
     betrag: params.betrag,
-    pfcTxId: params.pfcTxId,
+    paymentRef: params.paymentRef,
+    zahlungsArt: params.zahlungsArt,
   });
 
   const storagePath = `rechnungen/${params.fahrerUid}/${rechnungsNr}.pdf`;
@@ -219,7 +223,7 @@ export async function createRechnung(params: {
           firebaseStorageDownloadTokens: downloadToken,
           fahrerUid: params.fahrerUid,
           rechnungsNr,
-          pfcTxId: String(params.pfcTxId),
+          paymentRef: params.paymentRef,
         },
       },
     });
@@ -238,7 +242,8 @@ export async function createRechnung(params: {
       datum: FieldValue.serverTimestamp(),
       periode,
       betrag: params.betrag,
-      pfcTxId: params.pfcTxId,
+      paymentRef: params.paymentRef,
+      zahlungsArt: params.zahlungsArt,
       email: email ?? null,
       pdfSize: pdfBuffer.length,
       storagePath,
@@ -251,6 +256,7 @@ export async function createRechnung(params: {
         toEmail: email,
         toName: fahrerInfo.name ?? 'Fahrer',
         rechnungsNr,
+        zahlungsArt: params.zahlungsArt,
         pdfBuffer,
         gmailPassword: params.gmailPassword,
       });

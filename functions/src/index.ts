@@ -6,6 +6,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 initializeApp();
 
 export { createAboPaymentPage, pfcWebhook, chargeMonthlySubscriptions, cancelAbo, reactivateAbo } from './pfcAbo';
+export { createStripeAboSession, stripeWebhook, chargeStripeMonthlySubscriptions } from './stripeAbo';
 
 const REGION = 'europe-west6';
 

@@ -24,7 +24,7 @@ interface AboDaten {
   status?: AboStatus;
   nextChargeAt?: Timestamp;
   cancelledAt?: Timestamp;
-  pendingTransactionId?: number;
+  pendingSessionId?: string;
 }
 
 type Kategorie = 'furtgo_mini' | 'furtgo_plus' | 'furtgo_limu';
@@ -71,9 +71,9 @@ export default function FahrerEinstellungen() {
   const aboStarten = async () => {
     setAboLaedt(true);
     try {
-      const callable = httpsCallable<unknown, { paymentUrl: string; transactionId: number }>(
+      const callable = httpsCallable<unknown, { paymentUrl: string; transactionId: string }>(
         functions,
-        'createAboPaymentPage',
+        'createStripeAboSession',
       );
       const result = await callable({});
       const url = result.data.paymentUrl;
@@ -278,7 +278,7 @@ export default function FahrerEinstellungen() {
           </TouchableOpacity>
         )}
 
-        {abo.pendingTransactionId && !abo.status && (
+        {abo.pendingSessionId && !abo.status && (
           <Text style={styles.aboStatusSub}>Zahlung läuft… Status aktualisiert sich automatisch.</Text>
         )}
 

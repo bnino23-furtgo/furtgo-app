@@ -441,7 +441,8 @@ export const pfcWebhook = onRequest(
       try {
         await createRechnung({
           fahrerUid,
-          pfcTxId: txId,
+          paymentRef: String(txId),
+          zahlungsArt: 'PostFinance Checkout',
           betrag: ABO_PRICE_CHF,
           gmailPassword: GMAIL_APP_PASSWORD.value(),
         });
@@ -496,7 +497,11 @@ export const chargeMonthlySubscriptions = onSchedule(
 
     for (const doc of due.docs) {
       const uid = doc.id;
-      const aboData = doc.data().abo as { pfcTokenId?: number } | undefined;
+      const aboData = doc.data().abo as { pfcTokenId?: number; provider?: string } | undefined;
+      if (aboData?.provider === 'stripe') {
+        logger.info(`Fahrer ${uid} läuft auf Stripe — PFC-Cron überspringt`);
+        continue;
+      }
       const tokenId = aboData?.pfcTokenId;
       if (!tokenId) {
         logger.warn(`Fahrer ${uid} hat keinen pfcTokenId — ueberspringe`);
@@ -593,7 +598,7 @@ export const reactivateAbo = onCall(
 
     const fahrerRef = getFirestore().collection('fahrer').doc(uid);
     const snap = await fahrerRef.get();
-    const aboData = snap.data()?.abo as { status?: string; nextChargeAt?: Timestamp; pfcTokenId?: number } | undefined;
+    const aboData = snap.data()?.abo as { status?: string; nextChargeAt?: Timestamp; pfcTokenId?: number; stripePaymentMethodId?: string } | undefined;
 
     if (!aboData || aboData.status !== 'gekuendigt') {
       throw new HttpsError('failed-precondition', 'Kein gekündigtes Abo zum Reaktivieren');
@@ -604,7 +609,7 @@ export const reactivateAbo = onCall(
       throw new HttpsError('failed-precondition', 'Bezahlte Periode ist abgelaufen — bitte neues Abo abschliessen');
     }
 
-    if (!aboData.pfcTokenId) {
+    if (!aboData.pfcTokenId && !aboData.stripePaymentMethodId) {
       throw new HttpsError('failed-precondition', 'Kein gespeichertes Zahlungsmittel — bitte neues Abo abschliessen');
     }
 
