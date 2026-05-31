@@ -299,6 +299,10 @@
     "geschaetzt": "(geschätzt)",
     "fahrten": "Fahrten heute",
     "keineFahrten": "Keine abgeschlossenen Fahrten an diesem Tag.",
+    "tag": "Tag",
+    "woche": "Woche",
+    "wochenTotal": "Wochen-Total",
+    "keineWoche": "Keine abgeschlossenen Fahrten in dieser Woche.",
     "disclaimer": "Diese Übersicht ist ein Hilfsmittel und ersetzt nicht das gesetzlich vorgeschriebene Arbeitsbuch bzw. die zertifizierte ARV-2-App. Du bleibst für die korrekte Aufzeichnung deiner Arbeitszeit selbst verantwortlich."
   }
 }
