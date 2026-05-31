@@ -234,16 +234,12 @@ export default function AdminPanel() {
                     <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
                     <p style="font-size:14px;line-height:1.6;">Hallo ${escapeHtml(name)},</p>
                     <p style="font-size:14px;line-height:1.6;">
-                      wir haben unsere <strong>Allgemeinen Geschäftsbedingungen</strong>, das <strong>Impressum</strong>
-                      und die <strong>Datenschutzerklärung</strong> aktualisiert (Stand 26. April 2026).
+                      wir haben unsere <strong>Allgemeinen Geschäftsbedingungen</strong> und die
+                      <strong>Datenschutzerklärung</strong> aktualisiert (Stand 30. Mai 2026).
                     </p>
-                    <p style="font-size:14px;line-height:1.6;">Die wichtigsten Änderungen:</p>
+                    <p style="font-size:14px;line-height:1.6;">Die wichtigste Änderung:</p>
                     <ul style="font-size:14px;line-height:1.6;">
-                      <li>Neuer Firmenname: Bajic Mobility Solutions</li>
-                      <li>Web-App app.furtgo.ch für Fahrgäste ist live (auf iPhone via Safari «Zum Home-Bildschirm»)</li>
-                      <li>Aktualisierte Tarife und Plattform-Hinweise</li>
-                      <li>Erweiterte Datenschutzerklärung (Audit-Log, neue Subprocessors)</li>
-                      <li>Neuer Disclaimer zu Fahrer-Verantwortung und ARV-2</li>
+                      <li>Die Zahlungsabwicklung für das Fahrer-Abonnement erfolgt neu über <strong>Stripe</strong> statt über PostFinance Checkout. Für dich ändert sich am Ablauf nichts &ndash; das Abo kostet weiterhin CHF 60 pro Monat und kann jederzeit in der App gekündigt werden.</li>
                     </ul>
                     <p style="text-align:center;margin:24px 0;">
                       <a href="https://furtgo.ch/legal.html" style="background:#FFD700;color:#000;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">Legal-Seite öffnen</a>
