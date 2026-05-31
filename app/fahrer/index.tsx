@@ -103,6 +103,7 @@ export default function FahrerDashboard() {
   const [profilGeladen, setProfilGeladen] = useState(false);
   const [gesperrt, setGesperrt] = useState(false);
   const [online, setOnline] = useState(false);
+  const [privatModus, setPrivatModus] = useState(false);
   const [standort, setStandort] = useState<KoordType | null>(null);
   const [anfrage, setAnfrage] = useState<any>(null);
   const [modalSichtbar, setModalSichtbar] = useState(false);
@@ -421,6 +422,25 @@ export default function FahrerDashboard() {
   const aboOk = pfcAboAktiv || (aboGueltigBis !== null && aboGueltigBis > Date.now());
   const darfOnline = verifiziertOk && aboOk;
 
+  const privatSchalten = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    setMenuOffen(false);
+    if (privatModus) {
+      // Privat beenden → Fahrer bleibt offline
+      setPrivatModus(false);
+      logOnlineEvent(uid, false, null, 'privat-ende');
+      return;
+    }
+    // Privat starten: technisch offline (keine Aufträge, keine Arbeitszeit),
+    // aber separat geloggt (grund='privat') für die ARV-2-Aufzeichnung.
+    if (online) {
+      await onlineSchalten(false); // sauberer Teardown: Listener, Bubble, Notification
+    }
+    setPrivatModus(true);
+    logOnlineEvent(uid, false, null, 'privat');
+  };
+
   const onlineSchalten = async (wert: boolean) => {
     console.log('ONLINE-SCHALTEN aufgerufen mit wert=', wert, 'darfOnline=', darfOnline);
     if (wert && !darfOnline) {
@@ -491,6 +511,7 @@ export default function FahrerDashboard() {
       return;
     }
     const uid = auth.currentUser?.uid;
+    setPrivatModus(false);
     if (uid) logOnlineEvent(uid, true, aktuellerStandort, 'manuell');
 
     starteOnlineBetrieb(ref);
@@ -659,9 +680,19 @@ export default function FahrerDashboard() {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={[styles.onlineStatus, online ? styles.statusAn : styles.statusAus, !darfOnline && styles.statusGesperrt]}>
-          {online ? t('fahrer.online') : t('fahrer.offline')}
+        <Text style={[styles.onlineStatus, online ? styles.statusAn : styles.statusAus, privatModus && styles.statusPrivat, !darfOnline && !privatModus && styles.statusGesperrt]}>
+          {privatModus ? t('fahrer.privatUnterwegs') : online ? t('fahrer.online') : t('fahrer.offline')}
         </Text>
+        {arv2Aktiv && (
+          <TouchableOpacity
+            style={[styles.privatChip, privatModus && styles.privatChipAktiv]}
+            onPress={privatSchalten}
+          >
+            <Text style={[styles.privatChipText, privatModus && styles.privatChipTextAktiv]}>
+              {t('fahrer.privat')}
+            </Text>
+          </TouchableOpacity>
+        )}
         <Switch
           value={online}
           onValueChange={onlineSchalten}
@@ -939,6 +970,18 @@ const styles = StyleSheet.create({
   statusGesperrt: { opacity: 0.4 },
   statusAn: { color: '#4ade80' },
   statusAus: { color: '#f87171' },
+  statusPrivat: { color: '#3b82f6' },
+  privatChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    marginRight: 8,
+  },
+  privatChipAktiv: { backgroundColor: '#3b82f6' },
+  privatChipText: { color: '#3b82f6', fontSize: 13, fontWeight: '600' },
+  privatChipTextAktiv: { color: '#fff' },
   sosBtn: {
     position: 'absolute',
     right: 14,

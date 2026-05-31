@@ -90,7 +90,7 @@ export interface OnlineEvent {
   timestamp: Date;
   istOnline: boolean;
   standort?: KoordType;
-  grund?: 'manuell' | 'auto-pause' | 'inaktiv';
+  grund?: 'manuell' | 'auto-pause' | 'inaktiv' | 'privat' | 'privat-ende';
 }
 
 export interface ARV2Config {

@@ -54,6 +54,8 @@
     "hallo": "Bonjour, {{name}} ! 👋",
     "online": "🟢 En ligne",
     "offline": "🔴 Hors ligne",
+    "privat": "Privé",
+    "privatUnterwegs": "🔵 En trajet privé",
     "warteAufAnfragen": "En attente de demandes...",
     "neueAnfrage": "🔔 Nouvelle demande de course !",
     "annehmen": "Accepter ✓",

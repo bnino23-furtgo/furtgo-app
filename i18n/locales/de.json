@@ -56,6 +56,8 @@
     "hallo": "Hallo, {{name}}! 👋",
     "online": "🟢 Online",
     "offline": "🔴 Offline",
+    "privat": "Privat",
+    "privatUnterwegs": "🔵 Privat unterwegs",
     "warteAufAnfragen": "Warte auf Fahrtanfragen...",
     "neueAnfrage": "🔔 Neue Fahrtanfrage!",
     "annehmen": "Annehmen ✓",
