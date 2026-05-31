@@ -229,26 +229,26 @@ export default function AdminPanel() {
                 const name = `${n.vorname ?? ''} ${n.nachname ?? ''}`.trim() || 'Furtgo-Nutzer';
                 const html = `
                   <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
-                    <h2 style="margin:0 0 4px;">Furtgo</h2>
-                    <p style="color:#666;margin:0 0 20px;font-size:13px;">Wichtige Information</p>
+                    <h2 style="margin:0 0 4px;font-size:20px;">Furtgo</h2>
+                    <p style="color:#666;margin:0 0 20px;font-size:11px;">Wichtige Information</p>
                     <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
-                    <p style="font-size:14px;line-height:1.6;">Hallo ${escapeHtml(name)},</p>
-                    <p style="font-size:14px;line-height:1.6;">
+                    <p style="font-size:13px;line-height:1.6;">Hallo ${escapeHtml(name)},</p>
+                    <p style="font-size:13px;line-height:1.6;">
                       wir haben unsere <strong>Allgemeinen Geschäftsbedingungen</strong> und die
                       <strong>Datenschutzerklärung</strong> aktualisiert (Stand 30. Mai 2026).
                     </p>
-                    <p style="font-size:14px;line-height:1.6;">Die wichtigste Änderung:</p>
-                    <ul style="font-size:14px;line-height:1.6;">
+                    <p style="font-size:13px;line-height:1.6;">Die wichtigste Änderung:</p>
+                    <ul style="font-size:13px;line-height:1.6;">
                       <li>Die Zahlungsabwicklung für das Fahrer-Abonnement erfolgt neu über <strong>Stripe</strong> statt über PostFinance Checkout. Für dich ändert sich am Ablauf nichts &ndash; das Abo kostet weiterhin CHF 60 pro Monat und kann jederzeit in der App gekündigt werden.</li>
                     </ul>
                     <p style="text-align:center;margin:24px 0;">
-                      <a href="https://furtgo.ch/legal.html" style="background:#FFD700;color:#000;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;">Legal-Seite öffnen</a>
+                      <a href="https://furtgo.ch/legal.html" style="background:#FFD700;color:#000;padding:11px 26px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;font-size:14px;">Legal-Seite öffnen</a>
                     </p>
-                    <p style="font-size:13px;color:#666;line-height:1.6;">
+                    <p style="font-size:12px;color:#666;line-height:1.6;">
                       Wenn du Furtgo weiter nutzt, gelten die neuen AGB als angenommen. Bei Fragen melde dich gerne bei
                       <a href="mailto:support.furtgo@gmail.com">support.furtgo@gmail.com</a>.
                     </p>
-                    <p style="font-size:14px;line-height:1.6;margin-top:20px;">
+                    <p style="font-size:13px;line-height:1.6;margin-top:20px;">
                       Bis bald auf der Strasse,<br>
                       Dein Furtgo-Team
                     </p>
