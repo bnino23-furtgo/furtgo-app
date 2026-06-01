@@ -30,6 +30,9 @@ interface FahrerDaten {
     strafregisterSauber?: boolean;
     uidDokumentUrl?: string;
     uidNummer?: string;
+    firmenName?: string | null;
+    uidOrt?: string | null;
+    uidAktiv?: boolean | null;
     eingereichtAm?: number;
   };
   fahrzeug?: {
@@ -387,18 +390,27 @@ export default function AdminPanel() {
               {f.dokumente.uidNummer ? (
                 <Text style={styles.dokZeile}>🏢 UID-Nummer: {f.dokumente.uidNummer}</Text>
               ) : null}
+              {f.dokumente.firmenName ? (
+                <Text style={styles.dokZeile}>
+                  🏛️ Firma (UID-Register): {f.dokumente.firmenName}
+                  {f.dokumente.uidOrt ? ` · ${f.dokumente.uidOrt}` : ''}
+                  {f.dokumente.uidAktiv === true ? ' ✓ aktiv' : f.dokumente.uidAktiv === false ? ' (nicht aktiv)' : ''}
+                </Text>
+              ) : null}
               {f.dokumente.eingereichtAm && (
                 <Text style={styles.dokDatum}>
                   Eingereicht: {new Date(f.dokumente.eingereichtAm).toLocaleDateString('de-CH')}
                 </Text>
               )}
-              {(['fahrzeugausweisUrl', 'fuehrerscheinVorneUrl', 'fuehrerscheinHintenUrl', 'strafregisterUrl', 'uidDokumentUrl'] as const).map((key) => {
+              {(['fahrzeugausweisUrl', 'fuehrerscheinVorneUrl', 'fuehrerscheinHintenUrl', 'strafregisterUrl', 'uidDokumentUrl'] as const)
+                .filter((key) => key !== 'uidDokumentUrl' || f.dokumente?.uidDokumentUrl)
+                .map((key) => {
                 const labels: Record<string, string> = {
                   fahrzeugausweisUrl: '🚗 Fahrzeugausweis',
                   fuehrerscheinVorneUrl: '📋 Führerschein – Vorderseite',
                   fuehrerscheinHintenUrl: '📋 Führerschein – Rückseite',
                   strafregisterUrl: '📄 Strafregisterauszug',
-                  uidDokumentUrl: '🏢 UID-/Handelsregister-Bestätigung',
+                  uidDokumentUrl: '🏢 UID-/Handelsregister-Bestätigung (alt)',
                 };
                 const url = f.dokumente![key];
                 return (

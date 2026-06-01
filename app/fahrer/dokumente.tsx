@@ -14,17 +14,27 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage } from '@/constants/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, storage, functions } from '@/constants/firebase';
 import { Ionicons } from '@expo/vector-icons';
 
-type FotoKey = 'fahrzeugausweis' | 'fuehrerscheinVorne' | 'fuehrerscheinHinten' | 'strafregister' | 'uidDokument';
+type FotoKey = 'fahrzeugausweis' | 'fuehrerscheinVorne' | 'fuehrerscheinHinten' | 'strafregister';
 
 interface Fotos {
   fahrzeugausweis: string | null;
   fuehrerscheinVorne: string | null;
   fuehrerscheinHinten: string | null;
   strafregister: string | null;
-  uidDokument: string | null;
+}
+
+interface UidErgebnis {
+  gefunden: boolean;
+  uid?: string;
+  name?: string;
+  ort?: string | null;
+  aktiv?: boolean;
+  status?: string | null;
+  fehler?: string;
 }
 
 const SCHRITTE: { key: FotoKey; nr: number; label: string; sub: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -32,7 +42,6 @@ const SCHRITTE: { key: FotoKey; nr: number; label: string; sub: string; icon: ke
   { key: 'fuehrerscheinVorne', nr: 2, label: 'Führerschein – Vorderseite',   sub: 'Name und Nummer müssen sichtbar sein',         icon: 'id-card-outline' },
   { key: 'fuehrerscheinHinten',nr: 3, label: 'Führerschein – Rückseite',     sub: 'Vollständige Rückseite fotografieren',         icon: 'id-card-outline' },
   { key: 'strafregister',      nr: 4, label: 'Strafregisterauszug',          sub: 'Offizieller Auszug, nicht älter als 3 Monate', icon: 'document-text-outline' },
-  { key: 'uidDokument',        nr: 5, label: 'UID-Bestätigung',             sub: 'Handelsregister- oder UID-Auszug fotografieren', icon: 'business-outline' },
 ];
 
 export default function DokumenteEinreichen() {
@@ -41,7 +50,6 @@ export default function DokumenteEinreichen() {
     fuehrerscheinVorne: null,
     fuehrerscheinHinten: null,
     strafregister: null,
-    uidDokument: null,
   });
   const [strafregisterSauber, setStrafregisterSauber] = useState<boolean | null>(null);
   const [laden, setLaden] = useState(false);
@@ -53,8 +61,38 @@ export default function DokumenteEinreichen() {
   const [autoJahrgang, setAutoJahrgang] = useState('');
   const [autoFarbe, setAutoFarbe] = useState('');
 
-  // UID-Nummer
+  // UID-Nummer + Firmenname, Live-Prüfung gegen das öffentliche UID-Register
   const [uidNummer, setUidNummer] = useState('');
+  const [firmenName, setFirmenName] = useState('');
+  const [uidPruefen, setUidPruefen] = useState(false);
+  const [uidErgebnis, setUidErgebnis] = useState<UidErgebnis | null>(null);
+
+  // Tippt der offizielle Name vom eingegebenen ab? (nur Hinweis, nicht blockierend)
+  const nameWeichtAb =
+    uidErgebnis?.gefunden &&
+    firmenName.trim().length > 0 &&
+    uidErgebnis.name?.trim().toLowerCase() !== firmenName.trim().toLowerCase();
+
+  const uidLivePruefen = async () => {
+    if (!uidNummer.trim()) {
+      Alert.alert('UID fehlt', 'Bitte gib zuerst deine UID-Nummer ein.');
+      return;
+    }
+    setUidPruefen(true);
+    setUidErgebnis(null);
+    try {
+      const callable = httpsCallable<{ uid: string }, UidErgebnis>(functions, 'pruefeUid');
+      const res = await callable({ uid: uidNummer.trim() });
+      const data = res.data;
+      setUidErgebnis(data);
+      if (data.gefunden && data.uid) setUidNummer(data.uid); // auf CHE-XXX.XXX.XXX normalisieren
+    } catch (e) {
+      console.error('UID-Prüfung Fehler:', e);
+      setUidErgebnis({ gefunden: false, fehler: 'UID-Register nicht erreichbar. Bitte später erneut versuchen.' });
+    } finally {
+      setUidPruefen(false);
+    }
+  };
 
   const fotoMitKamera = async (key: FotoKey) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -91,12 +129,12 @@ export default function DokumenteEinreichen() {
   };
 
   const einreichen = async () => {
-    if (!fotos.fahrzeugausweis || !fotos.fuehrerscheinVorne || !fotos.fuehrerscheinHinten || !fotos.strafregister || !fotos.uidDokument) {
-      Alert.alert('Dokumente fehlen', 'Bitte lade alle 5 Dokumente hoch.');
+    if (!fotos.fahrzeugausweis || !fotos.fuehrerscheinVorne || !fotos.fuehrerscheinHinten || !fotos.strafregister) {
+      Alert.alert('Dokumente fehlen', 'Bitte lade alle 4 Dokumente hoch.');
       return;
     }
-    if (!uidNummer.trim()) {
-      Alert.alert('UID-Nummer fehlt', 'Bitte gib deine UID-Nummer ein.');
+    if (!uidErgebnis?.gefunden) {
+      Alert.alert('UID nicht geprüft', 'Bitte gib deine UID-Nummer ein und tippe auf "UID prüfen". Sie muss im Register gefunden werden.');
       return;
     }
     if (strafregisterSauber === null) {
@@ -117,12 +155,11 @@ export default function DokumenteEinreichen() {
         [fotos.fuehrerscheinVorne, `dokumente/${uid}/fuehrerschein_vorne`],
         [fotos.fuehrerscheinHinten,`dokumente/${uid}/fuehrerschein_hinten`],
         [fotos.strafregister,      `dokumente/${uid}/strafregister`],
-        [fotos.uidDokument,        `dokumente/${uid}/uid_dokument`],
       ];
-      const labels = ['Fahrzeugausweis', 'Führerschein Vorne', 'Führerschein Hinten', 'Strafregister', 'UID-Bestätigung'];
+      const labels = ['Fahrzeugausweis', 'Führerschein Vorne', 'Führerschein Hinten', 'Strafregister'];
       const urls: string[] = [];
       for (let i = 0; i < uploads.length; i++) {
-        setUploadFortschritt(`${labels[i]} wird hochgeladen... (${i + 1}/5)`);
+        setUploadFortschritt(`${labels[i]} wird hochgeladen... (${i + 1}/${uploads.length})`);
         urls.push(await fotoHochladen(uploads[i][0], uploads[i][1]));
       }
       setUploadFortschritt('Wird gespeichert...');
@@ -138,8 +175,11 @@ export default function DokumenteEinreichen() {
             fuehrerscheinVorneUrl: urls[1],
             fuehrerscheinHintenUrl: urls[2],
             strafregisterUrl: urls[3],
-            uidDokumentUrl: urls[4],
-            uidNummer: uidNummer.trim(),
+            uidNummer: uidErgebnis.uid ?? uidNummer.trim(),
+            firmenName: uidErgebnis.name ?? null,
+            uidOrt: uidErgebnis.ort ?? null,
+            uidAktiv: uidErgebnis.aktiv ?? null,
+            uidGeprueftAm: Date.now(),
             strafregisterSauber,
             eingereichtAm: Date.now(),
           },
@@ -167,7 +207,8 @@ export default function DokumenteEinreichen() {
                 <table style="width:100%;border-collapse:collapse;">
                   <tr><td style="padding:6px 0;font-size:14px;color:#333;">Fahrer</td><td style="text-align:right;font-size:14px;">${benutzer?.displayName ?? '(kein Name)'}</td></tr>
                   <tr><td style="padding:6px 0;font-size:14px;color:#333;">E-Mail</td><td style="text-align:right;font-size:14px;">${benutzer?.email ?? '–'}</td></tr>
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">UID-Nummer</td><td style="text-align:right;font-size:14px;">${uidNummer.trim()}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">UID-Nummer</td><td style="text-align:right;font-size:14px;">${uidErgebnis.uid ?? uidNummer.trim()}</td></tr>
+                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Firma (UID-Register)</td><td style="text-align:right;font-size:14px;">${uidErgebnis.name ?? '–'}${uidErgebnis.aktiv ? ' ✓ aktiv' : ' (nicht aktiv)'}</td></tr>
                   <tr><td style="padding:6px 0;font-size:14px;color:#333;">Fahrzeug</td><td style="text-align:right;font-size:14px;">${autoMarke.trim()} (${autoJahrgang.trim()}, ${autoFarbe.trim()})</td></tr>
                   <tr><td style="padding:6px 0;font-size:14px;color:#333;">Schildnummer</td><td style="text-align:right;font-size:14px;">${schildnummer.trim()}</td></tr>
                   <tr><td style="padding:6px 0;font-size:14px;color:#333;">Strafregister sauber</td><td style="text-align:right;font-size:14px;">${strafregisterSauber ? 'Ja' : 'Nein (Einträge vorhanden)'}</td></tr>
@@ -213,9 +254,9 @@ export default function DokumenteEinreichen() {
         {/* Fortschrittsbalken */}
         <View style={styles.fortschrittContainer}>
           <View style={styles.fortschrittBalken}>
-            <View style={[styles.fortschrittFill, { width: `${(fertigCount / 5) * 100}%` }]} />
+            <View style={[styles.fortschrittFill, { width: `${(fertigCount / SCHRITTE.length) * 100}%` }]} />
           </View>
-          <Text style={styles.fortschrittLabel}>{fertigCount} / 5 Dokumente hochgeladen</Text>
+          <Text style={styles.fortschrittLabel}>{fertigCount} / {SCHRITTE.length} Dokumente hochgeladen</Text>
         </View>
       </View>
 
@@ -262,7 +303,7 @@ export default function DokumenteEinreichen() {
           <View style={[styles.nrBadge, strafregisterSauber !== null && styles.nrBadgeErledigt]}>
             {strafregisterSauber !== null
               ? <Ionicons name="checkmark" size={16} color="#000" />
-              : <Text style={styles.nrText}>6</Text>
+              : <Text style={styles.nrText}>5</Text>
             }
           </View>
           <View style={styles.karteInfo}>
@@ -289,29 +330,76 @@ export default function DokumenteEinreichen() {
         </View>
       </View>
 
-      {/* UID-Nummer */}
+      {/* UID-Nummer + Firmenname mit Live-Prüfung */}
       <View style={styles.karte}>
         <View style={styles.karteHeader}>
-          <View style={[styles.nrBadge, uidNummer.trim() ? styles.nrBadgeErledigt : {}]}>
-            {uidNummer.trim()
+          <View style={[styles.nrBadge, uidErgebnis?.gefunden ? styles.nrBadgeErledigt : {}]}>
+            {uidErgebnis?.gefunden
               ? <Ionicons name="checkmark" size={16} color="#000" />
-              : <Text style={styles.nrText}>7</Text>
+              : <Text style={styles.nrText}>6</Text>
             }
           </View>
           <View style={styles.karteInfo}>
-            <Text style={styles.karteLabel}>UID-Nummer</Text>
-            <Text style={styles.karteSub}>Unternehmens-Identifikationsnummer (z.B. CHE-123.456.789)</Text>
+            <Text style={styles.karteLabel}>Firma & UID-Nummer</Text>
+            <Text style={styles.karteSub}>Wird live im offiziellen UID-Register geprüft</Text>
           </View>
-          <Ionicons name="business-outline" size={22} color={uidNummer.trim() ? '#4ade80' : '#444'} />
+          <Ionicons name="business-outline" size={22} color={uidErgebnis?.gefunden ? '#4ade80' : '#444'} />
         </View>
         <TextInput
           style={styles.fahrzeugInput}
+          placeholder="Firmenname (z.B. Muster Transport GmbH)"
+          placeholderTextColor="#555"
+          value={firmenName}
+          onChangeText={setFirmenName}
+        />
+        <TextInput
+          style={[styles.fahrzeugInput, { marginTop: 10 }]}
           placeholder="CHE-123.456.789"
           placeholderTextColor="#555"
           value={uidNummer}
-          onChangeText={setUidNummer}
+          onChangeText={(v) => { setUidNummer(v); setUidErgebnis(null); }}
           autoCapitalize="characters"
         />
+        <TouchableOpacity
+          style={[styles.uidPruefBtn, (uidPruefen || !uidNummer.trim()) && { opacity: 0.5 }]}
+          onPress={uidLivePruefen}
+          disabled={uidPruefen || !uidNummer.trim()}
+        >
+          {uidPruefen ? (
+            <ActivityIndicator color="#000" size="small" />
+          ) : (
+            <>
+              <Ionicons name="search-outline" size={18} color="#000" />
+              <Text style={styles.uidPruefBtnText}>UID prüfen</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {uidErgebnis && (
+          uidErgebnis.gefunden ? (
+            <View style={styles.uidOk}>
+              <Ionicons name="checkmark-circle" size={20} color="#4ade80" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.uidOkName}>
+                  {uidErgebnis.name}{uidErgebnis.ort ? ` · ${uidErgebnis.ort}` : ''}
+                </Text>
+                <Text style={styles.uidOkSub}>
+                  {uidErgebnis.uid} · {uidErgebnis.aktiv ? 'aktiv im Register' : 'im Register, aber nicht aktiv'}
+                </Text>
+                {nameWeichtAb && (
+                  <Text style={styles.uidHinweis}>
+                    Hinweis: offizieller Name weicht ab — es wird «{uidErgebnis.name}» übernommen.
+                  </Text>
+                )}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.uidFehler}>
+              <Ionicons name="close-circle" size={20} color="#f87171" />
+              <Text style={styles.uidFehlerText}>{uidErgebnis.fehler ?? 'UID nicht gefunden.'}</Text>
+            </View>
+          )
+        )}
       </View>
 
       {/* Fahrzeug-Daten */}
@@ -320,7 +408,7 @@ export default function DokumenteEinreichen() {
           <View style={[styles.nrBadge, (schildnummer && autoMarke && autoJahrgang && autoFarbe) ? styles.nrBadgeErledigt : {}]}>
             {(schildnummer && autoMarke && autoJahrgang && autoFarbe)
               ? <Ionicons name="checkmark" size={16} color="#000" />
-              : <Text style={styles.nrText}>8</Text>
+              : <Text style={styles.nrText}>7</Text>
             }
           </View>
           <View style={styles.karteInfo}>
@@ -500,6 +588,37 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   fahrzeugRow: { flexDirection: 'row', gap: 10 },
+
+  uidPruefBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#FFD700',
+    borderRadius: 10,
+    paddingVertical: 11,
+    marginTop: 10,
+  },
+  uidPruefBtnText: { color: '#000', fontSize: 14, fontWeight: '700' },
+  uidOk: {
+    flexDirection: 'row', gap: 10, alignItems: 'flex-start',
+    backgroundColor: '#4ade8015',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#4ade8040',
+    padding: 12,
+    marginTop: 12,
+  },
+  uidOkName: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  uidOkSub: { color: '#9ca3af', fontSize: 12, marginTop: 2 },
+  uidHinweis: { color: '#FFD700', fontSize: 12, marginTop: 6 },
+  uidFehler: {
+    flexDirection: 'row', gap: 10, alignItems: 'center',
+    backgroundColor: '#f8717115',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#f8717140',
+    padding: 12,
+    marginTop: 12,
+  },
+  uidFehlerText: { color: '#fca5a5', fontSize: 13, flex: 1 },
 
   einreichenBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
