@@ -328,9 +328,13 @@ export default function ProfilScreen() {
             </View>
 
             {verifiziert === 'genehmigt' ? (
-              <View style={styles.verifikationBadge}>
+              <TouchableOpacity
+                style={styles.verifikationBadge}
+                onPress={() => router.push('/fahrer/dokumente' as any)}
+              >
                 <Text style={styles.verifikationBadgeText}>{t('profil.verifiziert')}</Text>
-              </View>
+                <Text style={styles.verifikationBtnSub}>{t('profil.dokumenteNeu')}</Text>
+              </TouchableOpacity>
             ) : verifiziert === 'ausstehend' ? (
               <TouchableOpacity
                 style={[styles.verifikationBadge, { backgroundColor: '#2a2000', borderColor: '#FFD700' }]}
