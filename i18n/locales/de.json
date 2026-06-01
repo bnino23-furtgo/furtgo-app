@@ -305,6 +305,17 @@
     "woche": "Woche",
     "wochenTotal": "Wochen-Total",
     "keineWoche": "Keine abgeschlossenen Fahrten in dieser Woche.",
-    "disclaimer": "Diese Übersicht ist ein Hilfsmittel und ersetzt nicht das gesetzlich vorgeschriebene Arbeitsbuch bzw. die zertifizierte ARV-2-App. Du bleibst für die korrekte Aufzeichnung deiner Arbeitszeit selbst verantwortlich."
+    "disclaimer": "Diese Übersicht ist ein Hilfsmittel und ersetzt nicht das gesetzlich vorgeschriebene Arbeitsbuch bzw. die zertifizierte ARV-2-App. Du bleibst für die korrekte Aufzeichnung deiner Arbeitszeit selbst verantwortlich.",
+    "pause": "Pause",
+    "pausen": "Pausen",
+    "pauseHinzufuegen": "Pause hinzufügen",
+    "keinePausen": "Keine Pausen erfasst.",
+    "pauseStart": "Beginn",
+    "pauseEnde": "Ende",
+    "pauseUngueltig": "Das Ende muss nach dem Beginn liegen.",
+    "pauseLoeschen": "Pause löschen",
+    "pauseSpeichernFehler": "Pause konnte nicht gespeichert werden.",
+    "abbrechen": "Abbrechen",
+    "speichern": "Speichern"
   }
 }

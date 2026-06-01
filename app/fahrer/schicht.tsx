@@ -6,9 +6,20 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Modal,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
-import { collection, query, where, getDocs, orderBy, doc } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  doc,
+  setDoc,
+  documentId,
+} from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -31,12 +42,20 @@ interface OnlineEvent {
   istOnline: boolean;
 }
 
+interface PauseEintrag {
+  start: Date;
+  ende: Date;
+  dauerMin: number;
+}
+
 interface TagMetrik {
   tag: Date;
   anzahl: number;
   umsatz: number;
   lenkzeitMin: number;
   arbeitszeitMin: number;
+  pauseMin: number;
+  pausen: PauseEintrag[];
   geschaetzt: boolean;
   fahrten: FahrtZeile[];
 }
@@ -53,6 +72,18 @@ function tagesStart(d: Date): Date {
   const k = new Date(d);
   k.setHours(0, 0, 0, 0);
   return k;
+}
+
+/** Lokaler Datums-Key "YYYY-MM-DD" — Doc-ID-Bestandteil für schichten/{uid}_{datum}. */
+function datumKey(d: Date): string {
+  const j = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const t = String(d.getDate()).padStart(2, '0');
+  return `${j}-${m}-${t}`;
+}
+
+function num2(n: number): string {
+  return String(n).padStart(2, '0');
 }
 
 function tagesEnde(d: Date): Date {
@@ -119,12 +150,15 @@ function metrikenFuer(
   tag: Date,
   alleFahrten: FahrtZeile[],
   alleEvents: OnlineEvent[],
+  pausenMap: Record<string, PauseEintrag[]>,
   jetzt: Date
 ): TagMetrik {
   const von = tagesStart(tag);
   const bis = tagesEnde(tag);
   const fahrten = alleFahrten.filter((f) => f.start >= von && f.start <= bis);
   const events = alleEvents.filter((e) => e.timestamp >= von && e.timestamp <= bis);
+  const pausen = pausenMap[datumKey(von)] ?? [];
+  const pauseMin = pausen.reduce((s, p) => s + p.dauerMin, 0);
 
   const lenkzeitMin = fahrten.reduce((s, f) => s + f.dauerMin, 0);
   const umsatz = fahrten.reduce((s, f) => s + f.preis, 0);
@@ -161,7 +195,61 @@ function metrikenFuer(
     geschaetzt = true;
   }
 
-  return { tag: von, anzahl: fahrten.length, umsatz, lenkzeitMin, arbeitszeitMin, geschaetzt, fahrten };
+  // Pausen sind keine Arbeitszeit → von der Arbeitszeit abziehen (nie unter 0).
+  const arbeitszeitNetto = Math.max(0, arbeitszeitMin - pauseMin);
+
+  return {
+    tag: von,
+    anzahl: fahrten.length,
+    umsatz,
+    lenkzeitMin,
+    arbeitszeitMin: arbeitszeitNetto,
+    pauseMin,
+    pausen,
+    geschaetzt,
+    fahrten,
+  };
+}
+
+function ZeitStepper({
+  label,
+  stunde,
+  minute,
+  setStunde,
+  setMinute,
+}: {
+  label: string;
+  stunde: number;
+  minute: number;
+  setStunde: (n: number) => void;
+  setMinute: (n: number) => void;
+}) {
+  return (
+    <View style={styles.zeitWahl}>
+      <Text style={styles.zeitWahlLabel}>{label}</Text>
+      <View style={styles.zeitWahlRow}>
+        <View style={styles.zeitSpalte}>
+          <TouchableOpacity style={styles.zeitBtn} onPress={() => setStunde((stunde + 1) % 24)}>
+            <Ionicons name="chevron-up" size={22} color="#FFD700" />
+          </TouchableOpacity>
+          <Text style={styles.zeitWert}>{num2(stunde)}</Text>
+          <TouchableOpacity style={styles.zeitBtn} onPress={() => setStunde((stunde + 23) % 24)}>
+            <Ionicons name="chevron-down" size={22} color="#FFD700" />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.zeitDoppel}>:</Text>
+        <View style={styles.zeitSpalte}>
+          <TouchableOpacity style={styles.zeitBtn} onPress={() => setMinute((minute + 5) % 60)}>
+            <Ionicons name="chevron-up" size={22} color="#FFD700" />
+          </TouchableOpacity>
+          <Text style={styles.zeitWert}>{num2(minute)}</Text>
+          <TouchableOpacity style={styles.zeitBtn} onPress={() => setMinute((minute + 55) % 60)}>
+            <Ionicons name="chevron-down" size={22} color="#FFD700" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 export default function Schicht() {
@@ -172,7 +260,15 @@ export default function Schicht() {
   const [datum, setDatum] = useState<Date>(tagesStart(new Date()));
   const [fahrten, setFahrten] = useState<FahrtZeile[]>([]);
   const [onlineEvents, setOnlineEvents] = useState<OnlineEvent[]>([]);
+  const [pausenMap, setPausenMap] = useState<Record<string, PauseEintrag[]>>({});
   const [laden, setLaden] = useState(true);
+
+  // Pause-Eingabe-Modal
+  const [modalOffen, setModalOffen] = useState(false);
+  const [startH, setStartH] = useState(12);
+  const [startM, setStartM] = useState(0);
+  const [endeH, setEndeH] = useState(12);
+  const [endeM, setEndeM] = useState(30);
 
   const heute = useMemo(() => tagesStart(new Date()), []);
   const aeltesterTag = useMemo(() => addTage(heute, -MAX_TAGE_ZURUECK), [heute]);
@@ -207,9 +303,17 @@ export default function Schicht() {
       where('timestamp', '<=', bis),
       orderBy('timestamp', 'asc')
     );
+    // Range über die Doc-ID `{uid}_{YYYY-MM-DD}` — der uid-Präfix grenzt auf den
+    // eigenen Fahrer ein, das Datum sortiert lexikalisch = chronologisch.
+    // Vermeidet einen Composite-Index (fahrerId== + datum-Range).
+    const schichtenQ = query(
+      collection(db, 'schichten'),
+      where(documentId(), '>=', `${uid}_${datumKey(von)}`),
+      where(documentId(), '<=', `${uid}_${datumKey(bis)}`)
+    );
 
-    Promise.all([getDocs(fahrtenQ), getDocs(eventsQ)])
-      .then(([fSnap, eSnap]) => {
+    Promise.all([getDocs(fahrtenQ), getDocs(eventsQ), getDocs(schichtenQ)])
+      .then(([fSnap, eSnap, sSnap]) => {
         const liste: FahrtZeile[] = fSnap.docs
           .filter((d) => d.data().status === 'abgeschlossen')
           .map((d) => {
@@ -236,6 +340,28 @@ export default function Schicht() {
           istOnline: !!d.data().istOnline,
         }));
         setOnlineEvents(events);
+
+        const map: Record<string, PauseEintrag[]> = {};
+        sSnap.docs.forEach((d) => {
+          const data = d.data();
+          const key = data.datum ?? d.id.substring(uid.length + 1);
+          const arr = Array.isArray(data.pausen) ? data.pausen : [];
+          map[key] = arr
+            .map((p: any) => {
+              const start = toDate(p.start);
+              const ende = toDate(p.ende);
+              return {
+                start,
+                ende,
+                dauerMin:
+                  typeof p.dauerMin === 'number'
+                    ? p.dauerMin
+                    : Math.max(0, Math.round((ende.getTime() - start.getTime()) / 60000)),
+              };
+            })
+            .sort((a: PauseEintrag, b: PauseEintrag) => a.start.getTime() - b.start.getTime());
+        });
+        setPausenMap(map);
       })
       .catch((e) => console.log('Schicht laden Fehler (ignoriert):', e))
       .finally(() => setLaden(false));
@@ -243,17 +369,17 @@ export default function Schicht() {
 
   // Tagesansicht: genau ein Tag
   const tagMetrik = useMemo(
-    () => metrikenFuer(datum, fahrten, onlineEvents, new Date()),
-    [datum, fahrten, onlineEvents]
+    () => metrikenFuer(datum, fahrten, onlineEvents, pausenMap, new Date()),
+    [datum, fahrten, onlineEvents, pausenMap]
   );
 
   // Wochenansicht: 7 Tage + Summe
   const wochenTage = useMemo(() => {
     const jetzt = new Date();
     return Array.from({ length: 7 }, (_, i) =>
-      metrikenFuer(addTage(wochenAnfang, i), fahrten, onlineEvents, jetzt)
+      metrikenFuer(addTage(wochenAnfang, i), fahrten, onlineEvents, pausenMap, jetzt)
     );
-  }, [wochenAnfang, fahrten, onlineEvents]);
+  }, [wochenAnfang, fahrten, onlineEvents, pausenMap]);
 
   const wochenSumme = useMemo(() => {
     return wochenTage.reduce(
@@ -262,8 +388,9 @@ export default function Schicht() {
         umsatz: acc.umsatz + d.umsatz,
         lenkzeitMin: acc.lenkzeitMin + d.lenkzeitMin,
         arbeitszeitMin: acc.arbeitszeitMin + d.arbeitszeitMin,
+        pauseMin: acc.pauseMin + d.pauseMin,
       }),
-      { anzahl: 0, umsatz: 0, lenkzeitMin: 0, arbeitszeitMin: 0 }
+      { anzahl: 0, umsatz: 0, lenkzeitMin: 0, arbeitszeitMin: 0, pauseMin: 0 }
     );
   }, [wochenTage]);
 
@@ -282,6 +409,70 @@ export default function Schicht() {
   const zeigeTag = (tag: Date) => {
     setDatum(tagesStart(tag));
     setModus('tag');
+  };
+
+  // Schreibt die Pausen-Liste des aktiven Tages nach schichten/{uid}_{datum}
+  const pausenSchreiben = async (key: string, liste: PauseEintrag[]) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    const sortiert = [...liste].sort((a, b) => a.start.getTime() - b.start.getTime());
+    const total = sortiert.reduce((s, p) => s + p.dauerMin, 0);
+    const ref = doc(db, 'schichten', `${uid}_${key}`);
+    try {
+      await setDoc(
+        ref,
+        { fahrerId: uid, datum: key, pausen: sortiert, pauseMinTotal: total },
+        { merge: true }
+      );
+      setPausenMap((prev) => ({ ...prev, [key]: sortiert }));
+    } catch (e) {
+      console.log('Pause speichern Fehler:', e);
+      Alert.alert(t('schicht.pauseSpeichernFehler'));
+    }
+  };
+
+  const pauseModalOeffnen = () => {
+    const n = new Date();
+    setStartH(n.getHours());
+    setStartM(n.getMinutes() - (n.getMinutes() % 5));
+    const e = new Date(n.getTime() + 30 * 60000);
+    setEndeH(e.getHours());
+    setEndeM(e.getMinutes() - (e.getMinutes() % 5));
+    setModalOffen(true);
+  };
+
+  const pauseBestaetigen = () => {
+    const start = new Date(datum);
+    start.setHours(startH, startM, 0, 0);
+    const ende = new Date(datum);
+    ende.setHours(endeH, endeM, 0, 0);
+    if (ende.getTime() <= start.getTime()) {
+      Alert.alert(t('schicht.pauseUngueltig'));
+      return;
+    }
+    const key = datumKey(datum);
+    const neuePause: PauseEintrag = {
+      start,
+      ende,
+      dauerMin: Math.max(0, Math.round((ende.getTime() - start.getTime()) / 60000)),
+    };
+    setModalOffen(false);
+    pausenSchreiben(key, [...(pausenMap[key] ?? []), neuePause]);
+  };
+
+  const pauseLoeschenBestaetigen = (index: number) => {
+    Alert.alert(t('schicht.pauseLoeschen'), '', [
+      { text: t('schicht.abbrechen'), style: 'cancel' },
+      {
+        text: t('schicht.pauseLoeschen'),
+        style: 'destructive',
+        onPress: () => {
+          const key = datumKey(datum);
+          const rest = (pausenMap[key] ?? []).filter((_, i) => i !== index);
+          pausenSchreiben(key, rest);
+        },
+      },
+    ]);
   };
 
   return (
@@ -410,6 +601,39 @@ export default function Schicht() {
                 ))}
               </View>
             )}
+
+            {/* Pausen */}
+            <View style={styles.liste}>
+              <View style={styles.pausenHeader}>
+                <Text style={styles.listeTitel}>
+                  {t('schicht.pausen')}
+                  {tagMetrik.pauseMin > 0 ? ` · ${formatDauer(tagMetrik.pauseMin)}` : ''}
+                </Text>
+                <TouchableOpacity style={styles.pauseAddBtn} onPress={pauseModalOeffnen}>
+                  <Ionicons name="add" size={18} color="#000" />
+                  <Text style={styles.pauseAddText}>{t('schicht.pause')}</Text>
+                </TouchableOpacity>
+              </View>
+              {tagMetrik.pausen.length === 0 ? (
+                <Text style={styles.pausenLeer}>{t('schicht.keinePausen')}</Text>
+              ) : (
+                tagMetrik.pausen.map((p, i) => (
+                  <View key={i} style={styles.pauseEintrag}>
+                    <Ionicons name="pause-circle-outline" size={20} color="#FFD700" />
+                    <Text style={styles.pauseZeit}>
+                      {formatUhr(p.start)} – {formatUhr(p.ende)}
+                    </Text>
+                    <Text style={styles.pauseDauer}>{formatDauer(p.dauerMin)}</Text>
+                    <TouchableOpacity
+                      style={styles.pauseDel}
+                      onPress={() => pauseLoeschenBestaetigen(i)}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
           </>
         ) : (
           <>
@@ -467,6 +691,51 @@ export default function Schicht() {
           </>
         )}
       </ScrollView>
+
+      {/* Pause-Eingabe */}
+      <Modal
+        visible={modalOffen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalOffen(false)}
+      >
+        <View style={styles.modalBg}>
+          <View style={styles.modalKarte}>
+            <Text style={styles.modalTitel}>{t('schicht.pauseHinzufuegen')}</Text>
+            <Text style={styles.modalDatum}>{formatDatum(datum, loc, t)}</Text>
+            <View style={styles.zeitRow}>
+              <ZeitStepper
+                label={t('schicht.pauseStart')}
+                stunde={startH}
+                minute={startM}
+                setStunde={setStartH}
+                setMinute={setStartM}
+              />
+              <ZeitStepper
+                label={t('schicht.pauseEnde')}
+                stunde={endeH}
+                minute={endeM}
+                setStunde={setEndeH}
+                setMinute={setEndeM}
+              />
+            </View>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnAbbr]}
+                onPress={() => setModalOffen(false)}
+              >
+                <Text style={styles.modalBtnAbbrText}>{t('schicht.abbrechen')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSave]}
+                onPress={pauseBestaetigen}
+              >
+                <Text style={styles.modalBtnSaveText}>{t('schicht.speichern')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -572,4 +841,67 @@ const styles = StyleSheet.create({
   tagZeileFahrten: { color: '#e5e7eb', fontSize: 12 },
   tagZeileZeit: { color: '#9ca3af', fontSize: 11, marginTop: 2 },
   tagZeilePreis: { color: '#FFD700', fontSize: 14, fontWeight: 'bold' },
+
+  // Pausen
+  pausenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  pauseAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFD700',
+    borderRadius: 9,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  pauseAddText: { color: '#000', fontSize: 13, fontWeight: '700' },
+  pausenLeer: { color: '#9ca3af', fontSize: 13, paddingVertical: 6 },
+  pauseEintrag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16213e',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    gap: 10,
+  },
+  pauseZeit: { color: '#e5e7eb', fontSize: 14, fontWeight: '600', flex: 1 },
+  pauseDauer: { color: '#9ca3af', fontSize: 12 },
+  pauseDel: { padding: 4 },
+
+  // Pause-Modal
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalKarte: {
+    width: '100%',
+    backgroundColor: '#16213e',
+    borderRadius: 18,
+    padding: 20,
+  },
+  modalTitel: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
+  modalDatum: { color: '#9ca3af', fontSize: 13, textAlign: 'center', marginTop: 2, marginBottom: 18 },
+  zeitRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 22 },
+  zeitWahl: { alignItems: 'center' },
+  zeitWahlLabel: { color: '#9ca3af', fontSize: 12, marginBottom: 8 },
+  zeitWahlRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  zeitSpalte: { alignItems: 'center' },
+  zeitBtn: { padding: 4 },
+  zeitWert: { color: '#FFD700', fontSize: 28, fontWeight: 'bold', minWidth: 44, textAlign: 'center' },
+  zeitDoppel: { color: '#FFD700', fontSize: 28, fontWeight: 'bold', marginHorizontal: 2 },
+  modalBtnRow: { flexDirection: 'row', gap: 10 },
+  modalBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  modalBtnAbbr: { backgroundColor: '#1a1a2e' },
+  modalBtnAbbrText: { color: '#9ca3af', fontSize: 15, fontWeight: '600' },
+  modalBtnSave: { backgroundColor: '#FFD700' },
+  modalBtnSaveText: { color: '#000', fontSize: 15, fontWeight: '700' },
 });
