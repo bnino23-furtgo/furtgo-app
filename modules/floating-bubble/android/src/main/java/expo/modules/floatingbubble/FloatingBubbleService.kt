@@ -57,18 +57,32 @@ class FloatingBubbleService : Service() {
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    if (intent?.action == ACTION_STOP || !isRunning) {
+    // Expliziter Stop (Offline/Abmelden) → Dienst sauber beenden, NICHT neu starten.
+    if (intent?.action == ACTION_STOP) {
+      isRunning = false
       stopBubble()
       stopForeground(STOP_FOREGROUND_REMOVE)
       stopSelf()
       return START_NOT_STICKY
     }
-    sizeDp = intent?.getIntExtra(EXTRA_SIZE_DP, FloatingBubbleManager.DEFAULT_SIZE_DP)
-      ?: FloatingBubbleManager.DEFAULT_SIZE_DP
+
+    // Ab hier: normaler Start ODER System-Neustart nach Kill (intent == null).
+    // Bei einem Prozess-Kill wird die statische isRunning auf false zurückgesetzt,
+    // daher setzen wir sie hier wieder true, damit der Dienst weiterläuft und die
+    // Bubble erneut aufgebaut wird, statt sich selbst zu beenden.
+    isRunning = true
+
+    // sizeDp nur aus einem echten Intent übernehmen; beim System-Neustart (null)
+    // bleibt der zuletzt gesetzte bzw. Default-Wert erhalten.
+    intent?.getIntExtra(EXTRA_SIZE_DP, sizeDp)?.let { sizeDp = it }
+
     if (!appInForeground) {
       manager?.show(sizeDp)
     }
-    return START_NOT_STICKY
+
+    // START_STICKY: Android baut den Dienst nach einem Kill (Speicherdruck/Doze)
+    // automatisch wieder auf, damit die Bubble nicht dauerhaft verschwindet.
+    return START_STICKY
   }
 
   override fun onDestroy() {
