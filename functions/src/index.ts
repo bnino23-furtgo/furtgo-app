@@ -8,6 +8,7 @@ initializeApp();
 export { createAboPaymentPage, pfcWebhook, chargeMonthlySubscriptions, cancelAbo, reactivateAbo } from './pfcAbo';
 export { createStripeAboSession, stripeWebhook, chargeStripeMonthlySubscriptions } from './stripeAbo';
 export { pruefeUid } from './uidPruefung';
+export { setAdminClaim } from './adminClaim';
 
 const REGION = 'europe-west6';
 

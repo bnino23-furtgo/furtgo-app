@@ -8,29 +8,106 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/nutzer/$(request.auth.uid)).data.istAdmin == true;
     }
 
-    // Nutzer: eigene Daten, Admin darf alle lesen/schreiben
+    // Nutzer: eigene Daten lesen/schreiben. WICHTIG: istAdmin darf vom Nutzer NICHT
+    // selbst gesetzt/geaendert werden (sonst Privilege Escalation -> jeder waere Admin).
+    // Nur ein bestehender Admin aendert fremde Docs oder das Admin-Flag.
     match /nutzer/{userId} {
-      allow read, write: if request.auth != null && (request.auth.uid == userId || istAdmin());
+      allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
+      allow create: if request.auth != null && (
+        (request.auth.uid == userId && request.resource.data.get('istAdmin', false) == false)
+        || istAdmin());
+      allow update: if request.auth != null && (
+        (request.auth.uid == userId
+          && request.resource.data.get('istAdmin', false) == resource.data.get('istAdmin', false))
+        || istAdmin());
+      allow delete: if request.auth != null && (request.auth.uid == userId || istAdmin());
     }
 
-    // Fahrer: lesen für alle eingeloggten Nutzer, schreiben eigene Daten oder Admin
+    // Fahrer: lesbar fuer alle eingeloggten (Fahrgast braucht Fahrerliste + Live-Standort).
+    // Self-Write erlaubt, ABER sicherheits-/geldrelevante Felder eingefroren, damit ein
+    // Fahrer sich nicht selbst verifizieren, entsperren oder ein Abo schenken kann:
+    //  - verifiziert: darf hoechstens auf 'ausstehend' gesetzt werden (Doku-Upload), nie 'genehmigt'
+    //  - gesperrt, abo, aboGueltigBis: nur Admin/Cloud Function
     match /fahrer/{userId} {
+      function selfFelderOk() {
+        return request.resource.data.get('gesperrt', false) == resource.data.get('gesperrt', false)
+          && request.resource.data.get('aboGueltigBis', 0) == resource.data.get('aboGueltigBis', 0)
+          && request.resource.data.get('abo', {}) == resource.data.get('abo', {})
+          && (
+            request.resource.data.get('verifiziert', '') == resource.data.get('verifiziert', '')
+            || request.resource.data.get('verifiziert', '') == 'ausstehend'
+          );
+      }
       allow read: if request.auth != null;
-      allow write: if request.auth != null && (request.auth.uid == userId || istAdmin());
-    }
+      allow create: if request.auth != null && (
+        (request.auth.uid == userId
+          && request.resource.data.get('verifiziert', '') != 'genehmigt'
+          && request.resource.data.get('gesperrt', false) == false
+          && request.resource.data.get('aboGueltigBis', 0) == 0)
+        || istAdmin());
+      allow update: if request.auth != null && (
+        (request.auth.uid == userId && selfFelderOk())
+        || istAdmin());
+      allow delete: if istAdmin();
 
-    // Fahrten: nur eingeloggte Nutzer
-    match /fahrten/{fahrtId} {
-      allow read, write: if request.auth != null;
-
-      // Chat-Nachrichten innerhalb einer Fahrt
-      match /nachrichten/{nachrichtId} {
-        allow read, write: if request.auth != null;
+      // Rechnungen: Fahrer liest eigene (Cloud Function schreibt)
+      match /rechnungen/{rechnungsNr} {
+        allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
+        allow write: if false;
       }
 
-      // ARV 2 Audit-Log: Client darf lesen (nur eigene), schreiben nur Cloud Function
+      // ARV 2 Online-Events: Fahrer liest + erstellt eigene, keine Updates/Deletes (Audit-Integritaet)
+      match /online_events/{eventId} {
+        allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
+        allow create: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.istOnline is bool
+          && request.resource.data.keys().hasOnly(['timestamp', 'istOnline', 'standort', 'grund']);
+        allow update, delete: if false;
+      }
+    }
+
+    // Fahrten: nur Beteiligte (Fahrgast / zugewiesener bzw. aktiver Fahrer) + Admin.
+    // Fahrer duerfen offene 'wartend'-Anfragen LESEN (Dispatch-Modell, Client-Round-Robin)
+    // und nur dann schreiben, wenn sie selbst zugewiesen/aktiv sind. Damit kann niemand mehr
+    // fremde Fahrten lesen (Adressen, Preise, Chat) oder manipulieren (Status, Preis, Bewertung).
+    match /fahrten/{fahrtId} {
+      allow read: if request.auth != null && (
+        resource.data.fahrgastId == request.auth.uid
+        || resource.data.fahrerId == request.auth.uid
+        || resource.data.zugewiesenerFahrerId == request.auth.uid
+        || resource.data.status == 'wartend'
+        || istAdmin());
+      allow create: if request.auth != null
+        && request.resource.data.fahrgastId == request.auth.uid;
+      allow update: if request.auth != null && (
+        resource.data.fahrgastId == request.auth.uid
+        || resource.data.fahrerId == request.auth.uid
+        || resource.data.zugewiesenerFahrerId == request.auth.uid
+        || istAdmin());
+      allow delete: if istAdmin();
+
+      // Chat-Nachrichten: nur Beteiligte der zugehoerigen Fahrt
+      match /nachrichten/{nachrichtId} {
+        function fahrt() {
+          return get(/databases/$(database)/documents/fahrten/$(fahrtId)).data;
+        }
+        allow read, write: if request.auth != null && (
+          fahrt().fahrgastId == request.auth.uid
+          || fahrt().fahrerId == request.auth.uid
+          || fahrt().zugewiesenerFahrerId == request.auth.uid
+          || istAdmin());
+      }
+
+      // ARV 2 Audit-Log: nur Beteiligte lesen, schreiben nur Cloud Function
       match /changes/{changeId} {
-        allow read: if request.auth != null;
+        function fahrt() {
+          return get(/databases/$(database)/documents/fahrten/$(fahrtId)).data;
+        }
+        allow read: if request.auth != null && (
+          fahrt().fahrgastId == request.auth.uid
+          || fahrt().fahrerId == request.auth.uid
+          || istAdmin());
         allow write: if false;
       }
     }
@@ -50,22 +127,6 @@ service cloud.firestore {
       }
     }
 
-    // Rechnungen: Fahrer liest eigene (Cloud Function schreibt)
-    match /fahrer/{userId}/rechnungen/{rechnungsNr} {
-      allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
-      allow write: if false;
-    }
-
-    // ARV 2 Online-Events: Fahrer liest + erstellt eigene, keine Updates/Deletes (Audit-Integritaet)
-    match /fahrer/{userId}/online_events/{eventId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || istAdmin());
-      allow create: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.istOnline is bool
-        && request.resource.data.keys().hasOnly(['timestamp', 'istOnline', 'standort', 'grund']);
-      allow update, delete: if false;
-    }
-
     // ARV 2 Config/Feature-Flags: alle lesen, nur Admin schreiben
     match /config/{configId} {
       allow read: if request.auth != null;
@@ -78,7 +139,9 @@ service cloud.firestore {
       allow read: if false;
     }
 
-    // Mail: nur schreiben (Extension liest selbst)
+    // Mail: nur schreiben (Extension liest selbst).
+    // HINWEIS (offener Befund #4): aktuell kann jeder eingeloggte Nutzer beliebige Mails
+    // einreihen -> Missbrauchsvektor. Bewusst noch offen, Fix braucht Cloud-Function-Umbau.
     match /mail/{docId} {
       allow create: if request.auth != null;
       allow read, update, delete: if false;

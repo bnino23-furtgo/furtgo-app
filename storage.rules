@@ -1,16 +1,29 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // KYC-Dokumente (Handelsregister etc.): nur Eigentuemer + Admin lesen.
+    // Storage-Rules koennen Firestore nicht abfragen -> Admin-Erkennung ueber den
+    // Custom Claim request.auth.token.admin (gesetzt durch Callable setAdminClaim).
     match /dokumente/{userId}/{document} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null
+        && (request.auth.uid == userId || request.auth.token.admin == true);
+      allow write: if request.auth != null && request.auth.uid == userId
+        && request.resource.size < 10 * 1024 * 1024;
     }
+
+    // Ausweis-Fotos: hochsensibel -> nur Eigentuemer + Admin lesen.
     match /ausweis/{userId}/{document} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null
+        && (request.auth.uid == userId || request.auth.token.admin == true);
+      allow write: if request.auth != null && request.auth.uid == userId
+        && request.resource.size < 10 * 1024 * 1024;
     }
+
+    // Rechnungen: Eigentuemer + Admin lesen, schreiben nur Cloud Function
     match /rechnungen/{userId}/{document} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null
+        && (request.auth.uid == userId || request.auth.token.admin == true);
       allow write: if false;
     }
   }

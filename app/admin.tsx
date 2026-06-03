@@ -12,7 +12,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { addDoc, collection, getDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { auth, db } from '@/constants/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from '@/constants/firebase';
 
 interface FahrerDaten {
   id: string;
@@ -295,6 +296,19 @@ export default function AdminPanel() {
     );
   };
 
+  // Einmalig: Custom Claim admin:true setzen, damit Storage-Rules den Admin-Lesezugriff
+  // auf Ausweis-/Dokument-Fotos erlauben (#5). Danach Token erneuern.
+  const adminZugriffAktivieren = async () => {
+    try {
+      const callable = httpsCallable(functions, 'setAdminClaim');
+      await callable({});
+      await auth.currentUser?.getIdToken(true); // Token mit neuem Claim laden
+      Alert.alert('Erledigt', 'Admin-Zugriff auf Fotos aktiviert. Falls Fotos nicht laden: einmal ab- und neu anmelden.');
+    } catch (e: any) {
+      Alert.alert('Fehler', e?.message ?? 'Konnte Admin-Zugriff nicht aktivieren.');
+    }
+  };
+
   if (istAdmin === null) {
     return (
       <View style={styles.pinContainer}>
@@ -335,6 +349,10 @@ export default function AdminPanel() {
 
       <TouchableOpacity style={styles.agbMailBtn} onPress={agbUpdateMailSenden}>
         <Text style={styles.agbMailText}>📧  AGB-Update-Mail an alle senden</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.agbMailBtn} onPress={adminZugriffAktivieren}>
+        <Text style={styles.agbMailText}>🔑  Admin-Foto-Zugriff aktivieren (einmalig)</Text>
       </TouchableOpacity>
 
       {laden && <ActivityIndicator color="#FFD700" style={{ marginTop: 20 }} />}
