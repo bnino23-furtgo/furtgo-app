@@ -46,6 +46,8 @@
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.POST_NOTIFICATIONS"
       ]
     },
@@ -73,7 +75,14 @@
           }
         }
       ],
-      "expo-location",
+      [
+        "expo-location",
+        {
+          "isAndroidForegroundServiceEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "Furtgo nutzt deinen Standort auch im Hintergrund, damit Fahrgäste dich auf der Karte finden, solange du online bist."
+        }
+      ],
       "expo-audio",
       "expo-image-picker",
       "expo-localization"

@@ -15,6 +15,10 @@ let Notifications: typeof import('expo-notifications') | null = null;
 if (Platform.OS !== 'web' && !isExpoGo) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   Notifications = require('expo-notifications');
+  // Background-Standort-Task global registrieren (Stufe C). Muss am App-Entry
+  // definiert sein, falls das OS die App headless für Location-Delivery neu startet.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@/tasks/standortTask');
 }
 
 export default function RootLayout() {

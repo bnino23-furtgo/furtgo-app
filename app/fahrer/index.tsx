@@ -41,6 +41,7 @@ import { useTranslation } from 'react-i18next';
 import { applyLanguageForRole } from '@/i18n';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FloatingBubble from '@/modules/floating-bubble/src';
+import { STANDORT_TASK, ONLINE_UID_KEY } from '@/tasks/standortTask';
 
 async function abozahlungStarten() {
   try {
@@ -167,6 +168,7 @@ export default function FahrerDashboard() {
   const bubblePermissionDeclinedRef = useRef(false);
   const battOptDeclinedRef = useRef(false);
   const letzterGeschriebenerStandortRef = useRef<KoordType | null>(null);
+  const bgLocationActiveRef = useRef(false);
 
   // Durchschnittsbewertung laden und in Firestore speichern
   useEffect(() => {
@@ -325,7 +327,9 @@ export default function FahrerDashboard() {
     return coords;
   };
 
-  const starteOnlineBetrieb = (ref: any) => {
+  // Foreground-Heartbeat (Fallback): JS-Interval. Friert im Hintergrund/Bubble-Modus
+  // ein → wird nur genutzt, wenn der Background-Service nicht verfügbar ist.
+  const starteIntervalHeartbeat = (ref: any) => {
     if (locationIntervalRef.current) return; // läuft bereits
     locationIntervalRef.current = setInterval(async () => {
       try {
@@ -345,10 +349,52 @@ export default function FahrerDashboard() {
         console.log('Standort-Update Fehler (ignoriert):', e);
       }
     }, 10000);
+  };
+
+  // Stufe C: bevorzugt Background-Location mit location-Foreground-Service, damit der
+  // Fahrer auch bei gedrosseltem JS (Bubble-Modus, Display aus) online bleibt. Der
+  // Headless-Task in tasks/standortTask.ts schreibt standort + lastSeen. Fällt auf den
+  // JS-Interval zurück, wenn keine Hintergrund-Berechtigung erteilt wird oder nicht Android.
+  const starteStandortHeartbeat = async (ref: any) => {
+    const uid = auth.currentUser?.uid;
+    if (Platform.OS === 'android' && uid) {
+      try {
+        const { status } = await Location.requestBackgroundPermissionsAsync();
+        if (status === 'granted') {
+          // Headless-Task liest die UID hier, da er keinen React-State hat
+          await AsyncStorage.setItem(ONLINE_UID_KEY, uid);
+          const schonAktiv = await Location.hasStartedLocationUpdatesAsync(STANDORT_TASK).catch(() => false);
+          if (!schonAktiv) {
+            await Location.startLocationUpdatesAsync(STANDORT_TASK, {
+              accuracy: Location.Accuracy.Balanced,
+              timeInterval: 10000,
+              distanceInterval: 0,
+              pausesUpdatesAutomatically: false,
+              showsBackgroundLocationIndicator: false,
+              foregroundService: {
+                notificationTitle: t('fahrer.benachrichtigung'),
+                notificationBody: t('fahrer.benachrichtigungText'),
+                notificationColor: '#FFD400',
+              },
+            });
+          }
+          bgLocationActiveRef.current = true;
+          return; // Background-Heartbeat läuft → kein JS-Interval nötig
+        }
+      } catch (e) {
+        console.log('Background-Location Start fehlgeschlagen, Fallback auf Interval:', e);
+      }
+    }
+    starteIntervalHeartbeat(ref);
+  };
+
+  const starteOnlineBetrieb = (ref: any) => {
+    starteStandortHeartbeat(ref); // async, fire-and-forget
 
     const uid = auth.currentUser?.uid;
     console.log('STARTE ONLINE BETRIEB, uid:', uid);
     if (!uid) return;
+    if (listenUnsubRef.current) return; // Listener läuft bereits
 
     const q = query(collection(db, 'fahrten'), where('status', '==', 'wartend'));
     listenUnsubRef.current = onSnapshot(q, (snap) => {
@@ -396,6 +442,16 @@ export default function FahrerDashboard() {
     if (locationIntervalRef.current) {
       clearInterval(locationIntervalRef.current);
       locationIntervalRef.current = null;
+    }
+    // Stufe C: Background-Standort-Updates + location-Foreground-Service beenden.
+    // ONLINE_UID_KEY zuerst entfernen — selbst falls stop fehlschlägt, schreibt der
+    // Headless-Task dann nichts mehr (er bricht ohne UID ab).
+    if (Platform.OS === 'android') {
+      bgLocationActiveRef.current = false;
+      AsyncStorage.removeItem(ONLINE_UID_KEY).catch(() => {});
+      Location.hasStartedLocationUpdatesAsync(STANDORT_TASK)
+        .then((aktiv) => { if (aktiv) return Location.stopLocationUpdatesAsync(STANDORT_TASK); })
+        .catch(() => {});
     }
     if (listenUnsubRef.current) {
       listenUnsubRef.current();
