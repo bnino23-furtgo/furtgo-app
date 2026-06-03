@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, BackHandler } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { doc, onSnapshot, updateDoc, collection, query, orderBy } from 'firebase/firestore';
 import { auth, db } from '@/constants/firebase';
 import MapComponent from '@/components/MapComponent';
@@ -74,13 +74,25 @@ export default function FahrgastFahrt() {
     }, (err) => console.log('Fahrer-Listener Fehler (ignoriert):', err));
   }, [fahrerId]);
 
+  const navigation = useNavigation();
+
   // Nach abgeschlossener Fahrt: Zurück erst nach Bewertung erlauben.
-  // Blockt den Android-Hardware-Back, solange noch nicht bewertet wurde.
+  // Wichtig: Im native-stack wird Zurück (Hardware-Button UND Wisch-Geste) nativ
+  // behandelt — der JS-BackHandler greift dort nicht zuverlässig. Darum zusätzlich
+  // das navigation-eigene 'beforeRemove'-Event abfangen + Geste deaktivieren.
   useEffect(() => {
-    if (status !== 'abgeschlossen' || bewertet) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
-    return () => sub.remove();
-  }, [status, bewertet]);
+    const blockiert = status === 'abgeschlossen' && !bewertet;
+    navigation.setOptions({ gestureEnabled: !blockiert });
+    if (!blockiert) return;
+    const subBack = BackHandler.addEventListener('hardwareBackPress', () => true);
+    const subRemove = navigation.addListener('beforeRemove', (e: any) => {
+      e.preventDefault(); // Screen darf nicht entfernt werden, bis bewertet
+    });
+    return () => {
+      subBack.remove();
+      subRemove();
+    };
+  }, [navigation, status, bewertet]);
 
   const stornierenBestaetigen = async () => {
     if (!fahrtId) return;
