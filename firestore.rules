@@ -139,12 +139,14 @@ service cloud.firestore {
       allow read: if false;
     }
 
-    // Mail: nur schreiben (Extension liest selbst).
-    // HINWEIS (offener Befund #4): aktuell kann jeder eingeloggte Nutzer beliebige Mails
-    // einreihen -> Missbrauchsvektor. Bewusst noch offen, Fix braucht Cloud-Function-Umbau.
+    // Mail (Befund #4 GEFIXT): Clients duerfen NICHT mehr direkt schreiben.
+    // Mails werden ausschliesslich server-seitig ueber die Callables in
+    // functions/src/mailVersand.ts eingereiht (Admin-SDK umgeht die Rules).
+    // Empfaenger + Inhalt sind dort server-kontrolliert -> kein Phishing/Spam
+    // ueber support.furtgo@gmail.com mehr moeglich. Die Trigger-Email-Extension
+    // liest selbst.
     match /mail/{docId} {
-      allow create: if request.auth != null;
-      allow read, update, delete: if false;
+      allow read, create, update, delete: if false;
     }
 
     // Admin: niemand (nur Firebase Console)

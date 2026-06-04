@@ -9,6 +9,13 @@ export { createAboPaymentPage, pfcWebhook, chargeMonthlySubscriptions, cancelAbo
 export { createStripeAboSession, stripeWebhook, chargeStripeMonthlySubscriptions } from './stripeAbo';
 export { pruefeUid } from './uidPruefung';
 export { setAdminClaim } from './adminClaim';
+export {
+  sendeSupportMail,
+  sendeVerifikationsMail,
+  sendeAgbUpdateMail,
+  sendeDokumenteEingereichtMail,
+  sendeQuittungMail,
+} from './mailVersand';
 
 const REGION = 'europe-west6';
 

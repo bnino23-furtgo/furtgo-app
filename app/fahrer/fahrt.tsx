@@ -2,8 +2,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Linking, Platform, Alert, Animated } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
-import { doc, onSnapshot, updateDoc, collection, query, orderBy, addDoc, getDoc, where, arrayUnion } from 'firebase/firestore';
-import { auth, db } from '@/constants/firebase';
+import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDoc, where, arrayUnion } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions } from '@/constants/firebase';
 import MapComponent from '@/components/MapComponent';
 import Chat from '@/components/Chat';
 import { FahrtStatus, KoordType, OrtType } from '@/types';
@@ -202,49 +203,12 @@ export default function FahrerFahrt() {
 
   const sendeQuittungen = async (fahrerUid: string) => {
     try {
-      console.log('sendeQuittungen gestartet:', { fahrerUid, fahrgastEmail, preis, abholort: abholort?.adresse, zielort: zielort?.adresse, fahrtId });
-      const jetzt = new Date();
-      const datumText = jetzt.toLocaleDateString('de-DE', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-      });
-
-      // Fahrer-Daten laden (eigenes Dokument — erlaubt)
-      const fahrerSnap = await getDoc(doc(db, 'nutzer', fahrerUid));
-      const fahrerDaten = fahrerSnap?.data();
-      const fahrerNachname = fahrerDaten?.nachname ?? 'Fahrer';
-
-      const html = `
-        <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;">
-          <h2 style="text-align:center;margin:0 0 4px;">Furtgo</h2>
-          <p style="text-align:center;color:#666;margin:0 0 20px;font-size:13px;">Fahrtenquittung</p>
-          <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
-          <table style="width:100%;border-collapse:collapse;">
-            <tr><td style="padding:6px 0;font-size:14px;color:#333;">Datum</td><td style="text-align:right;font-size:14px;">${datumText}</td></tr>
-            <tr><td style="padding:6px 0;font-size:14px;color:#333;">Von</td><td style="text-align:right;font-size:14px;">${abholort?.adresse ?? '–'}</td></tr>
-            <tr><td style="padding:6px 0;font-size:14px;color:#333;">Nach</td><td style="text-align:right;font-size:14px;">${zielort?.adresse ?? '–'}</td></tr>
-            <tr><td style="padding:6px 0;font-size:14px;color:#333;">Fahrer</td><td style="text-align:right;font-size:14px;">${fahrerNachname}</td></tr>
-          </table>
-          <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
-          <table style="width:100%;border-collapse:collapse;">
-            <tr><td style="padding:8px 0;font-size:18px;font-weight:bold;">Gesamtbetrag</td><td style="text-align:right;font-size:18px;font-weight:bold;">CHF ${(preis ?? 0).toFixed(2)}</td></tr>
-          </table>
-          <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
-          <p style="color:#999;font-size:11px;">Fahrt-ID: ${fahrtId}</p>
-          <p style="color:#666;font-size:12px;text-align:center;margin-top:16px;">Vielen Dank für Ihre Fahrt mit Furtgo.<br>Bei Fragen: support.furtgo@gmail.com</p>
-        </div>`;
-
-      // Quittung nur an Fahrgast
-      if (fahrgastEmail) {
-        await addDoc(collection(db, 'mail'), {
-          to: [fahrgastEmail],
-          message: {
-            subject: `Ihre Furtgo Quittung — CHF ${(preis ?? 0).toFixed(2)}`,
-            html,
-          },
-        });
-      }
-      console.log('Quittungen erfolgreich in Firestore geschrieben');
+      console.log('sendeQuittungen gestartet:', { fahrerUid, fahrtId });
+      if (!fahrtId) return;
+      // Quittung server-seitig: Server prueft, dass der Aufrufer der Fahrer
+      // dieser Fahrt ist, liest Fahrt + Fahrgast-Mail aus der DB und baut den Text.
+      await httpsCallable(functions, 'sendeQuittungMail')({ fahrtId });
+      console.log('Quittung server-seitig eingereiht');
       Alert.alert(t('quittung.titel'), t('quittung.emailGesendet'));
     } catch (e: any) {
       console.error('Quittung Fehler:', e);

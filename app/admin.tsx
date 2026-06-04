@@ -11,7 +11,7 @@ import {
   Linking,
 } from 'react-native';
 import { router } from 'expo-router';
-import { addDoc, collection, getDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '@/constants/firebase';
 
@@ -120,42 +120,10 @@ export default function AdminPanel() {
       prev.map((f) => (f.id === fahrerId ? { ...f, verifiziert: status } : f))
     );
 
-    const f = fahrer.find((x) => x.id === fahrerId);
-    if (f?.fahrerEmail && (status === 'genehmigt' || status === 'abgelehnt')) {
+    if (status === 'genehmigt' || status === 'abgelehnt') {
       try {
-        const anrede = f.fahrerName ?? f.name ?? 'Fahrer';
-        const istGenehmigt = status === 'genehmigt';
-        const betreff = istGenehmigt
-          ? 'Furtgo — Du bist freigeschaltet ✓'
-          : 'Furtgo — Deine Dokumente wurden abgelehnt';
-        const html = istGenehmigt
-          ? `
-            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
-              <h2 style="margin:0 0 4px;">Furtgo</h2>
-              <p style="color:#666;margin:0 0 20px;font-size:13px;">Verifikations-Bestätigung</p>
-              <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
-              <h3 style="margin:0 0 12px;color:#16a34a;">Willkommen an Bord, ${anrede}!</h3>
-              <p style="font-size:14px;line-height:1.6;">Deine Dokumente wurden geprüft und freigegeben. Du kannst jetzt online gehen und Fahrten annehmen.</p>
-              <p style="font-size:14px;line-height:1.6;"><b>Nächster Schritt:</b> Abo aktivieren (CHF 60/Monat), dann im Fahrer-Dashboard den Online-Schalter umlegen.</p>
-              <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
-              <p style="color:#666;font-size:12px;text-align:center;">Bei Fragen: support.furtgo@gmail.com</p>
-            </div>`
-          : `
-            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
-              <h2 style="margin:0 0 4px;">Furtgo</h2>
-              <p style="color:#666;margin:0 0 20px;font-size:13px;">Dokumenten-Prüfung</p>
-              <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
-              <h3 style="margin:0 0 12px;color:#dc2626;">Hallo ${anrede},</h3>
-              <p style="font-size:14px;line-height:1.6;">Leider konnten wir deine eingereichten Dokumente nicht freigeben.</p>
-              <p style="font-size:14px;line-height:1.6;">Du kannst die Unterlagen jederzeit neu einreichen. Öffne dazu die Furtgo-App → Profil → Verifikation.</p>
-              <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
-              <p style="color:#666;font-size:12px;text-align:center;">Bei Fragen: support.furtgo@gmail.com</p>
-            </div>`;
-
-        await addDoc(collection(db, 'mail'), {
-          to: [f.fahrerEmail],
-          message: { subject: betreff, html },
-        });
+        // Mail server-seitig: Server liest Fahrer-Doc + baut den Text selbst.
+        await httpsCallable(functions, 'sendeVerifikationsMail')({ fahrerId, status });
       } catch (mailErr) {
         console.error('Fahrer-Mail Fehler (ignoriert):', mailErr);
       }
@@ -220,65 +188,16 @@ export default function AdminPanel() {
           onPress: async () => {
             setLaden(true);
             try {
-              const escapeHtml = (s: string) =>
-                s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              const snap = await getDocs(collection(db, 'nutzer'));
-              const nutzer = snap.docs
-                .map((d) => ({ id: d.id, ...d.data() } as any))
-                .filter((n) => n.email && typeof n.email === 'string');
-
-              let erfolg = 0;
-              let fehler = 0;
-              for (const n of nutzer) {
-                const name = `${n.vorname ?? ''} ${n.nachname ?? ''}`.trim() || 'Furtgo-Nutzer';
-                const html = `
-                  <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
-                    <h2 style="margin:0 0 4px;font-size:20px;">Furtgo</h2>
-                    <p style="color:#666;margin:0 0 20px;font-size:11px;">Wichtige Information</p>
-                    <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
-                    <p style="font-size:13px;line-height:1.6;">Hallo ${escapeHtml(name)},</p>
-                    <p style="font-size:13px;line-height:1.6;">
-                      wir haben unsere <strong>Allgemeinen Geschäftsbedingungen</strong> und die
-                      <strong>Datenschutzerklärung</strong> aktualisiert (Stand 30. Mai 2026).
-                    </p>
-                    <p style="font-size:13px;line-height:1.6;">Die wichtigste Änderung:</p>
-                    <ul style="font-size:13px;line-height:1.6;">
-                      <li>Die Zahlungsabwicklung für das Fahrer-Abonnement erfolgt neu über <strong>Stripe</strong> statt über PostFinance Checkout. Für dich ändert sich am Ablauf nichts &ndash; das Abo kostet weiterhin CHF 60 pro Monat und kann jederzeit in der App gekündigt werden.</li>
-                    </ul>
-                    <p style="text-align:center;margin:24px 0;">
-                      <a href="https://furtgo.ch/legal.html" style="background:#FFD700;color:#000;padding:11px 26px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;font-size:14px;">Legal-Seite öffnen</a>
-                    </p>
-                    <p style="font-size:12px;color:#666;line-height:1.6;">
-                      Wenn du Furtgo weiter nutzt, gelten die neuen AGB als angenommen. Bei Fragen melde dich gerne bei
-                      <a href="mailto:support.furtgo@gmail.com">support.furtgo@gmail.com</a>.
-                    </p>
-                    <p style="font-size:13px;line-height:1.6;margin-top:20px;">
-                      Bis bald auf der Strasse,<br>
-                      Dein Furtgo-Team
-                    </p>
-                  </div>`;
-                try {
-                  await addDoc(collection(db, 'mail'), {
-                    to: [n.email],
-                    message: {
-                      subject: 'Furtgo: AGB und Datenschutz aktualisiert',
-                      html,
-                    },
-                  });
-                  erfolg++;
-                } catch (e) {
-                  console.error('AGB-Mail Fehler:', n.id, e);
-                  fehler++;
-                }
-              }
+              // Massen-Mail server-seitig: Admin-Check + Versand in der Function.
+              const res: any = await httpsCallable(functions, 'sendeAgbUpdateMail')({});
               setLaden(false);
               Alert.alert(
                 'Versand abgeschlossen',
-                `${erfolg} Mails initiiert, ${fehler} Fehler.\n\nDie Trigger-Email-Extension verschickt sie nun via Gmail SMTP (kann ein paar Minuten dauern).`
+                `${res?.data?.erfolg ?? 0} Mails initiiert.\n\nDie Trigger-Email-Extension verschickt sie nun via Gmail SMTP (kann ein paar Minuten dauern).`
               );
             } catch (e: any) {
               setLaden(false);
-              Alert.alert('Fehler', e?.message ?? 'Unbekannter Fehler beim Lesen der Nutzer-Liste');
+              Alert.alert('Fehler', e?.message ?? 'Unbekannter Fehler beim Mail-Versand');
             }
           },
         },

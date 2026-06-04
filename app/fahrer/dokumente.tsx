@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { addDoc, collection, doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, storage, functions } from '@/constants/firebase';
@@ -194,31 +194,9 @@ export default function DokumenteEinreichen() {
       );
 
       try {
-        await addDoc(collection(db, 'mail'), {
-          to: ['support.furtgo@gmail.com'],
-          message: {
-            subject: `Neue Dokumente eingereicht — ${benutzer?.displayName ?? 'Fahrer'}`,
-            html: `
-              <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
-                <h2 style="margin:0 0 4px;">Furtgo</h2>
-                <p style="color:#666;margin:0 0 20px;font-size:13px;">Admin-Benachrichtigung</p>
-                <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
-                <h3 style="margin:0 0 12px;">Neue Dokumente eingereicht</h3>
-                <table style="width:100%;border-collapse:collapse;">
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Fahrer</td><td style="text-align:right;font-size:14px;">${benutzer?.displayName ?? '(kein Name)'}</td></tr>
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">E-Mail</td><td style="text-align:right;font-size:14px;">${benutzer?.email ?? '–'}</td></tr>
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">UID-Nummer</td><td style="text-align:right;font-size:14px;">${uidErgebnis.uid ?? uidNummer.trim()}</td></tr>
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Firma (UID-Register)</td><td style="text-align:right;font-size:14px;">${uidErgebnis.name ?? '–'}${uidErgebnis.aktiv ? ' ✓ aktiv' : ' (nicht aktiv)'}</td></tr>
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Fahrzeug</td><td style="text-align:right;font-size:14px;">${autoMarke.trim()} (${autoJahrgang.trim()}, ${autoFarbe.trim()})</td></tr>
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Schildnummer</td><td style="text-align:right;font-size:14px;">${schildnummer.trim()}</td></tr>
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Strafregister sauber</td><td style="text-align:right;font-size:14px;">${strafregisterSauber ? 'Ja' : 'Nein (Einträge vorhanden)'}</td></tr>
-                  <tr><td style="padding:6px 0;font-size:14px;color:#333;">Eingereicht am</td><td style="text-align:right;font-size:14px;">${new Date().toLocaleString('de-CH')}</td></tr>
-                </table>
-                <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
-                <p style="color:#666;font-size:13px;text-align:center;">Bitte im Admin-Panel prüfen und freigeben oder ablehnen.</p>
-              </div>`,
-          },
-        });
+        // Admin-Benachrichtigung server-seitig: Server liest das soeben
+        // geschriebene Fahrer-Doc und baut die Mail (Empfaenger fix = Support).
+        await httpsCallable(functions, 'sendeDokumenteEingereichtMail')({});
       } catch (mailErr) {
         console.error('Admin-Mail Fehler (ignoriert):', mailErr);
       }
