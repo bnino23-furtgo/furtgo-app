@@ -571,8 +571,12 @@ export default function FahrerDashboard() {
     if (uid) logOnlineEvent(uid, true, aktuellerStandort, 'manuell');
 
     starteOnlineBetrieb(ref);
-    // Persistente Benachrichtigung — Logo in Statusleiste sichtbar (wie Uber/Bolt)
-    if (Platform.OS !== 'web' && !isExpoGo && Notifications) {
+    // Persistente Online-Benachrichtigung NUR auf iOS: dort gibt es weder die
+    // Floating Bubble noch den Standort-Foreground-Service (beide Android-only),
+    // also ist dies der einzige "Du bist online"-Hinweis. Auf Android zeigt der
+    // Standort-Foreground-Service (Stufe C, gelb) bereits dieselbe Meldung —
+    // diese hier waere ein Duplikat, darum weggelassen.
+    if (Platform.OS === 'ios' && !isExpoGo && Notifications) {
       Notifications.scheduleNotificationAsync({
         content: {
           title: t('fahrer.benachrichtigung'),
