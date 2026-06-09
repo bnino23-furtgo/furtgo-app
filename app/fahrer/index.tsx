@@ -273,7 +273,10 @@ export default function FahrerDashboard() {
         setPfcAboAktiv(pfcAktiv);
         const altAboGueltig = typeof data?.aboGueltigBis === 'number' && data.aboGueltigBis > Date.now();
         if (!pfcAktiv && data?.aboGueltigBis && !altAboGueltig) setAboAbgelaufen(true);
-        if (!data?.onboardingGesehen) setOnboardingSichtbar(true);
+        // Nur fuer echte Fahrer (mit Fahrer-Dokument). Ohne `data &&` waere
+        // `!undefined?.onboardingGesehen` === true → Onboarding wuerde auch bei
+        // einem Fahrgast aufpoppen, dessen uid hier kurz durch den Listener laeuft.
+        if (data && !data.onboardingGesehen) setOnboardingSichtbar(true);
         const darfOnlineBeimLaden =
           data?.verifiziert === 'genehmigt' &&
           (pfcAktiv || altAboGueltig);
