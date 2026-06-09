@@ -12,10 +12,11 @@ import {
   Image,
   Linking,
 } from 'react-native';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, sendEmailVerification, signOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage } from '@/constants/firebase';
+import { auth, db, storage, functions } from '@/constants/firebase';
 import * as ImagePicker from 'expo-image-picker';
 import { useTranslation } from 'react-i18next';
 
@@ -70,7 +71,7 @@ export default function LoginScreen() {
     try {
       const { user } = await signInWithEmailAndPassword(auth, kannErneutSenden, passwort);
       if (!user.emailVerified) {
-        await sendEmailVerification(user);
+        await httpsCallable(functions, 'sendeBestaetigungsMail')({});
       }
       await signOut(auth);
       setResetErfolg(t('login.bestaetigungErneutGesendet'));
@@ -181,7 +182,7 @@ export default function LoginScreen() {
           });
         }
         try {
-          await sendEmailVerification(user);
+          await httpsCallable(functions, 'sendeBestaetigungsMail')({});
         } catch {
           // Mail-Versand-Fehler blockiert nicht die Registrierung
         }

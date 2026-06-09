@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions/v2';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 const REGION = 'europe-west6';
 const SUPPORT_EMAIL = 'support.furtgo@gmail.com';
@@ -264,6 +265,51 @@ export const sendeQuittungMail = onCall({ region: REGION }, async (request) => {
           <p style="color:#999;font-size:11px;">Fahrt-ID: ${escapeHtml(fahrtId)}</p>
           <p style="color:#666;font-size:12px;text-align:center;margin-top:16px;">Vielen Dank für Ihre Fahrt mit Furtgo.<br>Bei Fragen: support.furtgo@gmail.com</p>
         </div>`,
+    },
+  });
+  return { ok: true };
+});
+
+// --- 6. E-Mail-Bestaetigung (eingeloggter Nutzer) → an sich selbst ----------
+// Ersetzt das Firebase-Default-Mail (sendEmailVerification). Wir erzeugen den
+// Verifikations-Link server-seitig (Admin-SDK) und verschicken ihn ueber den
+// eigenen Mail-Versand — so taucht die rohe ...firebaseapp.com-URL nicht mehr
+// sichtbar in der Mail auf, sondern steckt hinter dem Button "E-Mail bestätigen".
+export const sendeBestaetigungsMail = onCall({ region: REGION }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Login erforderlich');
+
+  // E-Mail server-seitig aus dem Auth-Token bzw. dem Nutzer-Dokument bestimmen —
+  // der Client kann keinen fremden Empfaenger waehlen.
+  const email = (request.auth?.token?.email as string | undefined)
+    ?? ((await getFirestore().collection('nutzer').doc(uid).get()).data()?.email as string | undefined);
+  if (!email) throw new HttpsError('failed-precondition', 'Keine E-Mail hinterlegt');
+
+  let link: string;
+  try {
+    link = await getAuth().generateEmailVerificationLink(email);
+  } catch (e) {
+    logger.error('generateEmailVerificationLink fehlgeschlagen', e);
+    throw new HttpsError('internal', 'Bestätigungs-Link konnte nicht erzeugt werden');
+  }
+  // & in der URL fuer gueltiges HTML-Attribut maskieren (klickt sich korrekt auf).
+  const hrefLink = link.replace(/&/g, '&amp;');
+
+  await mailEinreihen({
+    to: [email],
+    message: {
+      subject: 'Furtgo — E-Mail bestätigen',
+      html: rahmen(`
+        <h2 style="margin:0 0 4px;">Furtgo</h2>
+        <p style="color:#666;margin:0 0 20px;font-size:13px;">E-Mail-Bestätigung</p>
+        <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
+        <p style="font-size:14px;line-height:1.6;">Willkommen bei Furtgo! Bitte bestätige deine E-Mail-Adresse, um dein Konto zu aktivieren.</p>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="${hrefLink}" style="background:#FFD700;color:#000;padding:13px 30px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;font-size:15px;">E-Mail bestätigen</a>
+        </p>
+        <p style="font-size:12px;color:#666;line-height:1.6;">Wenn du dich nicht bei Furtgo registriert hast, kannst du diese E-Mail einfach ignorieren.</p>
+        <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
+        <p style="color:#666;font-size:12px;text-align:center;">Bei Fragen: support.furtgo@gmail.com</p>`),
     },
   });
   return { ok: true };

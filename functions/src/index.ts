@@ -15,6 +15,7 @@ export {
   sendeAgbUpdateMail,
   sendeDokumenteEingereichtMail,
   sendeQuittungMail,
+  sendeBestaetigungsMail,
 } from './mailVersand';
 
 const REGION = 'europe-west6';
