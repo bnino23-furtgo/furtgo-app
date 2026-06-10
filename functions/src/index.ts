@@ -16,6 +16,7 @@ export {
   sendeDokumenteEingereichtMail,
   sendeQuittungMail,
   sendeBestaetigungsMail,
+  sendePasswortResetMail,
 } from './mailVersand';
 
 const REGION = 'europe-west6';

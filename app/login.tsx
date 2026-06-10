@@ -12,7 +12,7 @@ import {
   Image,
   Linking,
 } from 'react-native';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile, signOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -89,7 +89,9 @@ export default function LoginScreen() {
       return;
     }
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      // Eigener Mail-Versand statt Firebase-Default — versteckt die rohe
+      // ...firebaseapp.com-URL hinter dem Button "Neues Passwort setzen".
+      await httpsCallable(functions, 'sendePasswortResetMail')({ email: email.trim() });
       setResetErfolg(t('login.resetErfolg'));
     } catch {
       setFehler(t('login.fehlerUngueltigeEmail'));

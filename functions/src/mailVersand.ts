@@ -314,3 +314,63 @@ export const sendeBestaetigungsMail = onCall({ region: REGION }, async (request)
   });
   return { ok: true };
 });
+
+// --- 7. Passwort-Reset (ausgeloggter Nutzer) → an sich selbst ---------------
+// Ersetzt das Firebase-Default-Mail (sendPasswordResetEmail). Wie bei der
+// Bestaetigungs-Mail erzeugen wir den Reset-Link server-seitig und verstecken
+// die rohe ...firebaseapp.com-URL hinter dem Button "Neues Passwort setzen".
+// Diese Callable ist NICHT auth-gated — wer sein Passwort vergessen hat, ist
+// per Definition ausgeloggt. Schutz gegen Missbrauch/Enumeration:
+//   - existiert die E-Mail nicht, geben wir still { ok: true } zurueck (kein
+//     Versand, keine Information ob das Konto existiert).
+//   - der Empfaenger wird ausschliesslich aus dem uebergebenen E-Mail-Feld
+//     bestimmt; gesendet wird nur an die geprueft existierende Adresse.
+export const sendePasswortResetMail = onCall({ region: REGION }, async (request) => {
+  const email = String(request.data?.email ?? '').trim().toLowerCase();
+  // Einfache Plausibilitaetspruefung — kein Versand bei offensichtlichem Muell.
+  if (!email || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new HttpsError('invalid-argument', 'Ungültige E-Mail-Adresse');
+  }
+
+  // Existenz zuerst sauber pruefen: generatePasswordResetLink wirft fuer
+  // unbekannte Konten nur ein generisches auth/internal-error, getUserByEmail
+  // dagegen ein klares auth/user-not-found.
+  try {
+    await getAuth().getUserByEmail(email);
+  } catch (e) {
+    if ((e as { code?: string })?.code === 'auth/user-not-found') {
+      // Existenz nicht preisgeben — so tun, als waere die Mail verschickt.
+      return { ok: true };
+    }
+    logger.error('getUserByEmail fehlgeschlagen', e);
+    throw new HttpsError('internal', 'Reset-Link konnte nicht erzeugt werden');
+  }
+
+  let link: string;
+  try {
+    link = await getAuth().generatePasswordResetLink(email);
+  } catch (e) {
+    logger.error('generatePasswordResetLink fehlgeschlagen', e);
+    throw new HttpsError('internal', 'Reset-Link konnte nicht erzeugt werden');
+  }
+  const hrefLink = link.replace(/&/g, '&amp;');
+
+  await mailEinreihen({
+    to: [email],
+    message: {
+      subject: 'Furtgo — Passwort zurücksetzen',
+      html: rahmen(`
+        <h2 style="margin:0 0 4px;">Furtgo</h2>
+        <p style="color:#666;margin:0 0 20px;font-size:13px;">Passwort zurücksetzen</p>
+        <hr style="border:none;border-top:1px solid #ccc;margin-bottom:16px;">
+        <p style="font-size:14px;line-height:1.6;">Du hast angefragt, dein Passwort zurückzusetzen. Klicke auf den Button, um ein neues Passwort zu vergeben.</p>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="${hrefLink}" style="background:#FFD700;color:#000;padding:13px 30px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block;font-size:15px;">Neues Passwort setzen</a>
+        </p>
+        <p style="font-size:12px;color:#666;line-height:1.6;">Wenn du das nicht warst, kannst du diese E-Mail einfach ignorieren — dein Passwort bleibt unverändert.</p>
+        <hr style="border:none;border-top:1px solid #ccc;margin:16px 0;">
+        <p style="color:#666;font-size:12px;text-align:center;">Bei Fragen: support.furtgo@gmail.com</p>`),
+    },
+  });
+  return { ok: true };
+});
