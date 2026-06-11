@@ -15,6 +15,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   orderBy,
   doc,
   setDoc,
@@ -24,6 +25,8 @@ import { auth, db } from '@/constants/firebase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 type Modus = 'tag' | 'woche';
 
@@ -145,6 +148,20 @@ function formatWochenLabel(von: Date, loc: string): string {
   return `${v} – ${b}`;
 }
 
+/** HTML-Escaping für Freitext (Adressen) im PDF-Export. */
+function esc(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+interface FahrerInfo {
+  name: string;
+  schild: string;
+}
+
 /** Berechnet Kennzahlen für genau einen Tag aus den geladenen Roh-Daten. */
 function metrikenFuer(
   tag: Date,
@@ -262,6 +279,8 @@ export default function Schicht() {
   const [onlineEvents, setOnlineEvents] = useState<OnlineEvent[]>([]);
   const [pausenMap, setPausenMap] = useState<Record<string, PauseEintrag[]>>({});
   const [laden, setLaden] = useState(true);
+  const [fahrerInfo, setFahrerInfo] = useState<FahrerInfo>({ name: '', schild: '' });
+  const [exportiere, setExportiere] = useState(false);
 
   // Pause-Eingabe-Modal
   const [modalOffen, setModalOffen] = useState(false);
@@ -366,6 +385,25 @@ export default function Schicht() {
       .catch((e) => console.log('Schicht laden Fehler (ignoriert):', e))
       .finally(() => setLaden(false));
   }, [bereich]);
+
+  // Fahrer-Profil für den PDF-Kopf — einmalig.
+  // Voller Name aus nutzer.{vorname,nachname} (seriöses Arbeitszeit-Dokument),
+  // Kontrollschild aus dem fahrer-Doc.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    Promise.all([getDoc(doc(db, 'nutzer', uid)), getDoc(doc(db, 'fahrer', uid))])
+      .then(([nSnap, fSnap]) => {
+        const n = nSnap.data() ?? {};
+        const f = fSnap.data() ?? {};
+        const vollname = `${n.vorname ?? ''} ${n.nachname ?? ''}`.trim();
+        setFahrerInfo({
+          name: vollname || f.fahrerName || f.name || '',
+          schild: f.fahrzeug?.schildnummer ?? '',
+        });
+      })
+      .catch((e) => console.log('Fahrer-Info laden Fehler (ignoriert):', e));
+  }, []);
 
   // Tagesansicht: genau ein Tag
   const tagMetrik = useMemo(
@@ -474,6 +512,154 @@ export default function Schicht() {
       },
     ]);
   };
+
+  // ===== PDF-Export (Stufe 3) — Layout angelehnt an Anhang 1, OHNE Zertifikat-Branding =====
+
+  const infoZeile = (label: string, wert: string) =>
+    `<tr><td class="il">${esc(label)}</td><td>${wert ? esc(wert) : '&nbsp;'}</td></tr>`;
+
+  const kvZelle = (label: string, wert: string) =>
+    `<td class="kl">${esc(label)}</td><td class="kv">${wert ? esc(wert) : '&nbsp;'}</td>`;
+
+  const pdfRahmen = (untertitel: string, infoZeilen: string, body: string) => `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif; color: #1a1a2e; margin: 0; padding: 24px; font-size: 12px; }
+  .kopf { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 3px solid #1a1a2e; padding-bottom: 8px; }
+  .brand { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+  .brand .g { color: #b8860b; }
+  .subtitel { font-size: 15px; font-weight: 600; color: #475569; }
+  .disclaimer { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 8px 10px; font-size: 10px; color: #78350f; margin: 12px 0 14px; border-radius: 4px; line-height: 1.4; }
+  table { width: 100%; border-collapse: collapse; }
+  table.info { margin-bottom: 14px; }
+  table.info td { padding: 4px 0; font-size: 12px; border: none; }
+  table.info td.il { color: #64748b; width: 150px; }
+  h2 { font-size: 13px; margin: 16px 0 6px; color: #1a1a2e; }
+  table.kv td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 11px; width: 25%; }
+  table.kv td.kl { background: #f1f5f9; color: #475569; font-weight: 600; }
+  table.daten th { background: #1a1a2e; color: #fff; padding: 6px 8px; font-size: 11px; text-align: left; }
+  table.daten td { border: 1px solid #cbd5e1; padding: 5px 8px; font-size: 11px; }
+  table.daten td.num { text-align: right; white-space: nowrap; }
+  table.daten tr.summe td { font-weight: 700; background: #f1f5f9; }
+  .ausfuellen td { padding: 10px 8px; }
+  .leer { color: #94a3b8; }
+  .sign { margin-top: 30px; display: flex; gap: 40px; }
+  .sign div { flex: 1; border-top: 1px solid #1a1a2e; padding-top: 4px; font-size: 10px; color: #64748b; }
+  .fuss { margin-top: 26px; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px; }
+  .muted { color: #94a3b8; }
+</style></head><body>
+  <div class="kopf"><div class="brand">Furt<span class="g">go</span></div><div class="subtitel">${esc(untertitel)}</div></div>
+  <div class="disclaimer">${esc(t('schicht.disclaimer'))}</div>
+  <table class="info"><tbody>${infoZeilen}</tbody></table>
+  ${body}
+  <div class="sign"><div>${esc(t('schicht.pdfUnterschrift'))}</div><div>${esc(t('schicht.pdfDatum'))}</div></div>
+  <div class="fuss">${esc(t('schicht.pdfFusszeile'))} · ${esc(t('schicht.pdfErstellt'))}: ${new Date().toLocaleString(loc)}</div>
+</body></html>`;
+
+  const buildTagHtml = (m: TagMetrik): string => {
+    const beginn = m.fahrten.length ? formatUhr(m.fahrten[0].start) : '';
+    const ende = m.fahrten.length ? formatUhr(m.fahrten[m.fahrten.length - 1].ende) : '';
+    const arbeitszeitTxt =
+      formatDauer(m.arbeitszeitMin) + (m.geschaetzt ? ` ${t('schicht.geschaetzt')}` : '');
+
+    const info =
+      infoZeile(t('schicht.pdfName'), fahrerInfo.name) +
+      infoZeile(t('schicht.pdfKontrollschild'), fahrerInfo.schild) +
+      infoZeile(
+        t('schicht.pdfDatum'),
+        m.tag.toLocaleDateString(loc, { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
+      );
+
+    const kennzahlen = `<h2>${esc(t('schicht.titel'))}</h2><table class="kv"><tbody>
+      <tr>${kvZelle(t('schicht.pdfArbeitsbeginn'), beginn)}${kvZelle(t('schicht.pdfArbeitsende'), ende)}</tr>
+      <tr>${kvZelle(t('schicht.lenkzeit'), formatDauer(m.lenkzeitMin))}${kvZelle(t('schicht.arbeitszeit'), arbeitszeitTxt)}</tr>
+      <tr>${kvZelle(t('schicht.pausen'), formatDauer(m.pauseMin))}${kvZelle(t('schicht.anzahlFahrten'), String(m.anzahl))}</tr>
+      <tr>${kvZelle(t('schicht.umsatz'), `CHF ${m.umsatz.toFixed(2)}`)}${kvZelle('', '')}</tr>
+    </tbody></table>`;
+
+    // Felder, die der Helper (noch) nicht erfasst — zum manuellen Ausfüllen.
+    const ausfuellen = `<table class="kv ausfuellen"><tbody>
+      <tr>${kvZelle(t('schicht.pdfRuhezeit'), '')}${kvZelle(t('schicht.pdfKmBeginn'), '')}</tr>
+      <tr>${kvZelle(t('schicht.pdfKmEnde'), '')}${kvZelle(t('schicht.pdfBemerkungen'), '')}</tr>
+    </tbody></table>`;
+
+    const fahrtenTab = m.fahrten.length
+      ? `<h2>${esc(t('schicht.pdfFahrten'))}</h2><table class="daten">
+          <thead><tr><th>${esc(t('schicht.pdfNr'))}</th><th>${esc(t('schicht.pdfBeginn'))}</th><th>${esc(t('schicht.pdfDauer'))}</th><th>${esc(t('schicht.pdfVon'))}</th><th>${esc(t('schicht.pdfNach'))}</th><th>${esc(t('schicht.pdfPreis'))}</th></tr></thead>
+          <tbody>${m.fahrten
+            .map(
+              (f, i) =>
+                `<tr><td class="num">${i + 1}</td><td>${formatUhr(f.start)}</td><td>${esc(formatDauer(f.dauerMin))}</td><td>${esc(f.abhol)}</td><td>${esc(f.ziel)}</td><td class="num">CHF ${f.preis.toFixed(2)}</td></tr>`
+            )
+            .join('')}</tbody></table>`
+      : `<h2>${esc(t('schicht.pdfFahrten'))}</h2><p class="muted">${esc(t('schicht.keineFahrten'))}</p>`;
+
+    const pausenTab = m.pausen.length
+      ? `<h2>${esc(t('schicht.pausen'))}</h2><table class="daten">
+          <thead><tr><th>${esc(t('schicht.pdfBeginn'))}</th><th>${esc(t('schicht.pdfEnde'))}</th><th>${esc(t('schicht.pdfDauer'))}</th></tr></thead>
+          <tbody>${m.pausen
+            .map(
+              (p) => `<tr><td>${formatUhr(p.start)}</td><td>${formatUhr(p.ende)}</td><td>${esc(formatDauer(p.dauerMin))}</td></tr>`
+            )
+            .join('')}</tbody></table>`
+      : '';
+
+    return pdfRahmen(
+      t('schicht.pdfTagesblatt'),
+      info,
+      kennzahlen + ausfuellen + fahrtenTab + pausenTab
+    );
+  };
+
+  const buildWocheHtml = (tage: TagMetrik[], summe: typeof wochenSumme): string => {
+    const info =
+      infoZeile(t('schicht.pdfName'), fahrerInfo.name) +
+      infoZeile(t('schicht.pdfKontrollschild'), fahrerInfo.schild) +
+      infoZeile(t('schicht.pdfWoche'), formatWochenLabel(wochenAnfang, loc));
+
+    const zeilen = tage
+      .map(
+        (d) =>
+          `<tr><td>${esc(formatWochentag(d.tag, loc))}</td><td class="num">${d.anzahl}</td><td class="num">${esc(formatDauer(d.lenkzeitMin))}</td><td class="num">${esc(formatDauer(d.arbeitszeitMin))}</td><td class="num">${esc(formatDauer(d.pauseMin))}</td><td class="num">CHF ${d.umsatz.toFixed(2)}</td></tr>`
+      )
+      .join('');
+
+    const tabelle = `<h2>${esc(t('schicht.wochenTotal'))}</h2><table class="daten">
+      <thead><tr><th>${esc(t('schicht.pdfTag'))}</th><th>${esc(t('schicht.anzahlFahrten'))}</th><th>${esc(t('schicht.lenkzeit'))}</th><th>${esc(t('schicht.arbeitszeit'))}</th><th>${esc(t('schicht.pausen'))}</th><th>${esc(t('schicht.umsatz'))}</th></tr></thead>
+      <tbody>${zeilen}
+        <tr class="summe"><td>${esc(t('schicht.wochenTotal'))}</td><td class="num">${summe.anzahl}</td><td class="num">${esc(formatDauer(summe.lenkzeitMin))}</td><td class="num">${esc(formatDauer(summe.arbeitszeitMin))}</td><td class="num">${esc(formatDauer(summe.pauseMin))}</td><td class="num">CHF ${summe.umsatz.toFixed(2)}</td></tr>
+      </tbody></table>`;
+
+    return pdfRahmen(t('schicht.pdfWochenblatt'), info, tabelle);
+  };
+
+  const exportieren = async () => {
+    if (exportiere) return;
+    setExportiere(true);
+    try {
+      const html =
+        modus === 'tag' ? buildTagHtml(tagMetrik) : buildWocheHtml(wochenTage, wochenSumme);
+      const { uri } = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: t('schicht.titel'),
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        Alert.alert(t('schicht.titel'), uri);
+      }
+    } catch (e) {
+      console.log('PDF-Export Fehler:', e);
+      Alert.alert(t('schicht.exportFehler'));
+    } finally {
+      setExportiere(false);
+    }
+  };
+
+  const exportLabel = modus === 'tag' ? t('schicht.exportTag') : t('schicht.exportWoche');
+  const hatDaten = modus === 'tag' ? tagMetrik.anzahl > 0 : wochenSumme.anzahl > 0;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -690,6 +876,24 @@ export default function Schicht() {
             )}
           </>
         )}
+
+        {/* PDF-Export */}
+        {!laden && hatDaten && (
+          <TouchableOpacity
+            style={[styles.exportBtn, exportiere && styles.exportBtnAktiv]}
+            onPress={exportieren}
+            disabled={exportiere}
+          >
+            {exportiere ? (
+              <ActivityIndicator color="#000" size="small" />
+            ) : (
+              <>
+                <Ionicons name="document-text-outline" size={18} color="#000" />
+                <Text style={styles.exportBtnText}>{exportLabel}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Pause-Eingabe */}
@@ -873,6 +1077,21 @@ const styles = StyleSheet.create({
   pauseZeit: { color: '#e5e7eb', fontSize: 14, fontWeight: '600', flex: 1 },
   pauseDauer: { color: '#9ca3af', fontSize: 12 },
   pauseDel: { padding: 4 },
+
+  // PDF-Export
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFD700',
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 24,
+    minHeight: 50,
+  },
+  exportBtnAktiv: { opacity: 0.6 },
+  exportBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
 
   // Pause-Modal
   modalBg: {
