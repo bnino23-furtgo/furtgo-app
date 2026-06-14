@@ -82,6 +82,8 @@
     "standortFehltText": "Veuillez autoriser l'accès à la position pour passer en ligne.",
     "benachrichtigung": "🚕 Furtgo — Vous êtes en ligne",
     "benachrichtigungText": "En attente de nouvelles commandes...",
+    "pausenWarnungTitel": "⏸️ Il est temps de faire une pause",
+    "pausenWarnungText": "Tu es en ligne depuis 4 h 30. Prévois maintenant une pause d'au moins 45 minutes.",
     "bubblePermissionTitel": "Afficher Furtgo par-dessus les autres apps",
     "bubblePermissionText": "Pour ne manquer aucune course, Furtgo peut afficher une petite bulle au-dessus de tes autres apps. Furtgo a besoin d'une autorisation spéciale pour cela.",
     "bubblePermissionErlauben": "Autoriser",

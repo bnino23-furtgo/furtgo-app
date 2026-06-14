@@ -84,6 +84,8 @@
     "standortFehltText": "Bitte erlaube den Standortzugriff im Browser, um online zu gehen.",
     "benachrichtigung": "🚕 Furtgo — Du bist online",
     "benachrichtigungText": "Warte auf neue Aufträge...",
+    "pausenWarnungTitel": "⏸️ Zeit für eine Pause",
+    "pausenWarnungText": "Du bist seit 4,5 Stunden online. Plane jetzt eine Pause von mindestens 45 Minuten ein.",
     "bubblePermissionTitel": "Furtgo über andere Apps anzeigen",
     "bubblePermissionText": "Damit du Aufträge nicht verpasst, kann Furtgo eine kleine Bubble über deinen anderen Apps anzeigen. Dafür braucht Furtgo eine spezielle Erlaubnis.",
     "bubblePermissionErlauben": "Erlauben",

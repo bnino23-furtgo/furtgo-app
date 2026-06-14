@@ -84,6 +84,8 @@
     "standortFehltText": "Please allow location access in the browser to go online.",
     "benachrichtigung": "🚕 Furtgo — You are online",
     "benachrichtigungText": "Waiting for new orders...",
+    "pausenWarnungTitel": "⏸️ Time for a break",
+    "pausenWarnungText": "You've been online for 4.5 hours. Plan a break of at least 45 minutes now.",
     "bubblePermissionTitel": "Show Furtgo over other apps",
     "bubblePermissionText": "So you don't miss any rides, Furtgo can show a small bubble over your other apps. Furtgo needs a special permission for this.",
     "bubblePermissionErlauben": "Allow",

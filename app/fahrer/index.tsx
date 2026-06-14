@@ -61,6 +61,10 @@ const TARIFE: Record<Kategorie, { grundpreis: number; proKm: number; label: stri
   furtgo_limu: { grundpreis: 8.00, proKm: 6.00, label: 'Furtgo Limu' },
 };
 
+// ARV-2 Pausen-Warnung (Stufe 4): nach 4,5 h ununterbrochener Online-Zeit erinnern.
+const PAUSEN_WARN_ID = 'pausen-warnung';
+const PAUSEN_WARN_SEKUNDEN = 4.5 * 60 * 60; // 16200 s — ARV-2-Grenze (max. 4,5 h Lenkzeit am Stück)
+
 // expo-notifications funktioniert nicht in Expo Go ab SDK 53
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
@@ -89,6 +93,16 @@ if (!isExpoGo) {
       enableLights: true,
       lockscreenVisibility: Notifications!.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true,
+    });
+    // ARV-2 Pausen-Warnung (Stufe 4): eigener Channel, HIGH statt MAX und OHNE bypassDnd —
+    // eine Pausen-Erinnerung soll "Nicht stören" respektieren, anders als eine Fahrtanfrage.
+    Notifications!.setNotificationChannelAsync('pausen_warnung', {
+      name: 'Pausen-Erinnerung',
+      importance: Notifications!.AndroidImportance.HIGH,
+      vibrationPattern: [0, 400, 200, 400],
+      sound: 'default',
+      enableVibrate: true,
+      lockscreenVisibility: Notifications!.AndroidNotificationVisibility.PUBLIC,
     });
     // alten Channel löschen, damit der Nutzer ihn nicht in den Settings sieht
     Notifications!.deleteNotificationChannelAsync('fahrtanfragen').catch(() => {});
@@ -127,6 +141,14 @@ export default function FahrerDashboard() {
           const aktiv = data?.arv2Enabled === true && Array.isArray(data?.arv2TestFahrerIds)
             && data.arv2TestFahrerIds.includes(user.uid);
           setArv2Aktiv(!!aktiv);
+          // Test-Override: erlaubt es, die 4,5-h-Pausen-Warnung ohne Rebuild kurz zu testen
+          // (z.B. config/features.pausenWarnTestSekunden = 60 → Warnung nach 1 Min).
+          // Für Produktion das Feld einfach entfernen → Default 4,5 h greift wieder.
+          if (typeof data?.pausenWarnTestSekunden === 'number' && data.pausenWarnTestSekunden > 0) {
+            pausenWarnSekundenRef.current = data.pausenWarnTestSekunden;
+          } else {
+            pausenWarnSekundenRef.current = PAUSEN_WARN_SEKUNDEN;
+          }
         })
         .catch(() => {});
     });
@@ -165,6 +187,7 @@ export default function FahrerDashboard() {
   const modalTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anfrageRef = useRef<any>(null);
   const onlineNotifIdRef = useRef<string | null>(null);
+  const pausenWarnSekundenRef = useRef<number>(PAUSEN_WARN_SEKUNDEN);
   const bubblePermissionDeclinedRef = useRef(false);
   const battOptDeclinedRef = useRef(false);
   const letzterGeschriebenerStandortRef = useRef<KoordType | null>(null);
@@ -460,6 +483,12 @@ export default function FahrerDashboard() {
       listenUnsubRef.current();
       listenUnsubRef.current = null;
     }
+    // ARV-2 Pausen-Warnung abbrechen — Offline beendet die zusammenhängende Online-Zeit.
+    // Zentraler Teardown: greift bei Offline-Toggle, Privat (ruft onlineSchalten(false)),
+    // Logout und Unmount. Idempotent — feste ID, kein Treffer ist kein Fehler.
+    if (!isExpoGo && Notifications) {
+      Notifications.cancelScheduledNotificationAsync(PAUSEN_WARN_ID).catch(() => {});
+    }
     setAnfrage(null);
     setModalSichtbar(false);
   };
@@ -498,6 +527,27 @@ export default function FahrerDashboard() {
     }
     setPrivatModus(true);
     logOnlineEvent(uid, false, null, 'privat');
+  };
+
+  // ARV-2 Pausen-Warnung (Stufe 4): lokale Notification 4,5 h nach dem Online-Gehen.
+  // Nur für Test-Fahrer (arv2Aktiv). Feste ID — das OS hält geplante Notifications über
+  // App-Neustarts hinweg, daher kein Reschedule beim Wiederherstellen des Online-Status.
+  // Abgebrochen wird sie zentral in stoppeOnlineBetrieb() (Offline/Privat/Logout).
+  const planePausenWarnung = () => {
+    if (isExpoGo || !Notifications || !arv2Aktiv) return;
+    Notifications.cancelScheduledNotificationAsync(PAUSEN_WARN_ID).catch(() => {});
+    Notifications.scheduleNotificationAsync({
+      identifier: PAUSEN_WARN_ID,
+      content: {
+        title: t('fahrer.pausenWarnungTitel'),
+        body: t('fahrer.pausenWarnungText'),
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: pausenWarnSekundenRef.current,
+        channelId: 'pausen_warnung', // nur Android relevant, auf iOS ignoriert
+      },
+    }).catch(() => {});
   };
 
   const onlineSchalten = async (wert: boolean) => {
@@ -574,6 +624,7 @@ export default function FahrerDashboard() {
     if (uid) logOnlineEvent(uid, true, aktuellerStandort, 'manuell');
 
     starteOnlineBetrieb(ref);
+    planePausenWarnung();
     // Persistente Online-Benachrichtigung NUR auf iOS: dort gibt es weder die
     // Floating Bubble noch den Standort-Foreground-Service (beide Android-only),
     // also ist dies der einzige "Du bist online"-Hinweis. Auf Android zeigt der
