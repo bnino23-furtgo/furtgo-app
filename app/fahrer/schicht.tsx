@@ -308,6 +308,23 @@ export default function Schicht() {
   const istAktuelleWoche = wochenAnfang.getTime() === wochenStart(heute).getTime();
   const istAeltesteWoche = wochenAnfang.getTime() <= wochenStart(aeltesterTag).getTime();
 
+  // Sicherheits-Guard: Der Schicht-Helper ist nur für ARV-2-Test-Fahrer freigegeben.
+  // Belt-and-Suspenders zusätzlich zum Menü-Gating in fahrer/index.tsx — falls jemand
+  // per Deep-Link direkt hierher gelangt, sofort zurück zum Dashboard. Fail-closed:
+  // bei fehlender Freigabe ODER Lesefehler wird umgeleitet.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { router.replace('/fahrer'); return; }
+    getDoc(doc(db, 'config', 'features'))
+      .then((snap) => {
+        const data = snap.data();
+        const erlaubt = data?.arv2Enabled === true && Array.isArray(data?.arv2TestFahrerIds)
+          && data.arv2TestFahrerIds.includes(uid);
+        if (!erlaubt) router.replace('/fahrer');
+      })
+      .catch(() => router.replace('/fahrer'));
+  }, []);
+
   useEffect(() => {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
