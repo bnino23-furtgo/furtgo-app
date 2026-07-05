@@ -2,9 +2,11 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Linking, Platform, Alert, Animated } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, onSnapshot, updateDoc, collection, query, orderBy, getDoc, where, arrayUnion } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '@/constants/firebase';
+import { STANDORT_TASK, AKTIVE_FAHRT_KEY } from '@/tasks/standortTask';
 import MapComponent from '@/components/MapComponent';
 import Chat from '@/components/Chat';
 import { FahrtStatus, KoordType, OrtType } from '@/types';
@@ -43,7 +45,7 @@ export default function FahrerFahrt() {
   const neueAnfrageRef = useRef<any>(null);
   const bannerSlide = useRef(new Animated.Value(-200)).current;
 
-  const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const locationSubRef = useRef<Location.LocationSubscription | null>(null);
 
   useEffect(() => {
     if (!fahrtId) return;
@@ -61,6 +63,16 @@ export default function FahrerFahrt() {
     }, (err) => console.log('Fahrt-Listener Fehler (ignoriert):', err));
 
     startStandortUpdates();
+
+    // Background-Standort-Task (Stufe C, Dashboard) pausieren — sonst konkurriert er
+    // während der Fahrt mit watchPositionAsync oben um das GPS. Flag verhindert, dass
+    // das im Stack weiterlaufende Dashboard ihn per eigenem onSnapshot wieder hochfährt.
+    AsyncStorage.setItem(AKTIVE_FAHRT_KEY, '1').catch(() => {});
+    if (Platform.OS === 'android') {
+      Location.hasStartedLocationUpdatesAsync(STANDORT_TASK)
+        .then((aktiv) => { if (aktiv) return Location.stopLocationUpdatesAsync(STANDORT_TASK); })
+        .catch(() => {});
+    }
 
     const meinUid = auth.currentUser?.uid;
     const chatQ = query(collection(db, 'fahrten', fahrtId, 'nachrichten'), orderBy('erstelltAm', 'asc'));
@@ -101,8 +113,11 @@ export default function FahrerFahrt() {
       unsubscribe();
       unsubChat();
       if (unsubNeueAnfragen) unsubNeueAnfragen();
-      if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
+      if (locationSubRef.current) { locationSubRef.current.remove(); locationSubRef.current = null; }
       if (bannerTimeoutRef.current) clearTimeout(bannerTimeoutRef.current);
+      // Fahrt vorbei (oder Wechsel zur nächsten Fahrt, deren useEffect mit derselben
+      // UID gleich neu startet) — Dashboard darf den Background-Task wieder starten.
+      AsyncStorage.removeItem(AKTIVE_FAHRT_KEY).catch(() => {});
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fahrtId]);
@@ -111,22 +126,38 @@ export default function FahrerFahrt() {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') return;
 
-    const updateLoc = async () => {
-      try {
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-        setMeinStandort(coords);
-        const uid = auth.currentUser?.uid;
-        if (uid) await updateDoc(doc(db, 'fahrer', uid), { standort: coords });
-      } catch (e) {
-        console.log('Fahrt-Standort-Update Fehler (ignoriert):', e);
+    const schreibeStandort = (loc: Location.LocationObject) => {
+      const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setMeinStandort(coords);
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        updateDoc(doc(db, 'fahrer', uid), { standort: coords })
+          .catch((e) => console.log('Fahrt-Standort-Schreiben Fehler (ignoriert):', e));
       }
     };
 
-    await updateLoc();
-    locationIntervalRef.current = setInterval(updateLoc, 5000);
+    // Sofort einen ersten Fix holen, damit die Karte nicht leer startet
+    try {
+      const ersterFix = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      schreibeStandort(ersterFix);
+    } catch (e) {
+      console.log('Erster Standort-Fix Fehler (ignoriert):', e);
+    }
+
+    // Kontinuierliche Live-Verfolgung: pusht jede echte Bewegung sofort
+    try {
+      if (locationSubRef.current) { locationSubRef.current.remove(); locationSubRef.current = null; }
+      locationSubRef.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 4000,
+          distanceInterval: 10,
+        },
+        schreibeStandort
+      );
+    } catch (e) {
+      console.log('Standort-Verfolgung Fehler (ignoriert):', e);
+    }
   };
 
   const bannerAnnehmen = async () => {

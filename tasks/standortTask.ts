@@ -14,6 +14,12 @@ export const STANDORT_TASK = 'furtgo-standort-update';
 // Wird beim Online-Schalten gesetzt, beim Offline-Schalten gelöscht. Der Headless-
 // Task hat keinen React-State und liest die UID von hier.
 export const ONLINE_UID_KEY = 'furtgo_online_uid';
+// Wird von fahrt.tsx beim Start/Ende einer Fahrt gesetzt/gelöscht. Verhindert, dass
+// das Dashboard (bleibt im Stack gemountet, sein onSnapshot feuert bei jedem
+// Standort-Schreiben) den Background-Task während der Fahrt wieder hochfährt —
+// fahrt.tsx schreibt dann selbst per watchPositionAsync, zwei GPS-Abos würden sich
+// sonst gegenseitig blockieren (Standort friert ein).
+export const AKTIVE_FAHRT_KEY = 'furtgo_aktive_fahrt';
 
 // Lebt nur solange der JS-Kontext geladen ist. Reicht, um stationäres Schreiben
 // (Fahrer parkiert/wartet) auf reines lastSeen zu reduzieren — wie der alte

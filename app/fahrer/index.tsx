@@ -41,7 +41,7 @@ import { useTranslation } from 'react-i18next';
 import { applyLanguageForRole } from '@/i18n';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FloatingBubble from '@/modules/floating-bubble/src';
-import { STANDORT_TASK, ONLINE_UID_KEY } from '@/tasks/standortTask';
+import { STANDORT_TASK, ONLINE_UID_KEY, AKTIVE_FAHRT_KEY } from '@/tasks/standortTask';
 
 async function abozahlungStarten() {
   try {
@@ -192,6 +192,7 @@ export default function FahrerDashboard() {
   const battOptDeclinedRef = useRef(false);
   const letzterGeschriebenerStandortRef = useRef<KoordType | null>(null);
   const bgLocationActiveRef = useRef(false);
+  const kartenStandortSubRef = useRef<Location.LocationSubscription | null>(null);
 
   // Durchschnittsbewertung laden und in Firestore speichern
   useEffect(() => {
@@ -329,6 +330,7 @@ export default function FahrerDashboard() {
       unsubAuth();
       if (locationIntervalRef.current) clearInterval(locationIntervalRef.current);
       if (listenUnsubRef.current) listenUnsubRef.current();
+      stoppeKartenStandortWatch();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -385,6 +387,14 @@ export default function FahrerDashboard() {
     const uid = auth.currentUser?.uid;
     if (Platform.OS === 'android' && uid) {
       try {
+        // Während einer aktiven Fahrt schreibt fahrt.tsx selbst per watchPositionAsync.
+        // Diese Funktion wird vom Dashboard-onSnapshot bei jedem Standort-Schreiben
+        // erneut aufgerufen (Dashboard bleibt im Stack gemountet) — ohne diese Prüfung
+        // würde sie den Background-Task mitten in der Fahrt wieder hochfahren und mit
+        // fahrt.tsx um das GPS konkurrieren (Standort friert ein).
+        const aktiveFahrt = await AsyncStorage.getItem(AKTIVE_FAHRT_KEY);
+        if (aktiveFahrt) return;
+
         const { status } = await Location.requestBackgroundPermissionsAsync();
         if (status === 'granted') {
           // Headless-Task liest die UID hier, da er keinen React-State hat
@@ -414,8 +424,35 @@ export default function FahrerDashboard() {
     starteIntervalHeartbeat(ref);
   };
 
+  // Hält NUR die eigene Karte (MapComponent, `standort`-State) live. Der Background-
+  // Task (Stufe C, aktiv bei "Immer zulassen") schreibt Standort ausschliesslich nach
+  // Firestore — er läuft als Headless-Task ohne React-Context und kann `setStandort`
+  // nicht aufrufen. Ohne dieses Abo bleibt die eigene Karte beim letzten Fix vom
+  // Online-Gehen eingefroren, solange Stufe C aktiv ist (Bug vom Fahrer gemeldet:
+  // Marker bewegt sich nicht, obwohl online). Kontinuierliches Abo statt Polling,
+  // daher keine Konkurrenz mit dem Background-Task ums GPS.
+  const starteKartenStandortWatch = async () => {
+    try {
+      if (kartenStandortSubRef.current) { kartenStandortSubRef.current.remove(); kartenStandortSubRef.current = null; }
+      kartenStandortSubRef.current = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, timeInterval: 4000, distanceInterval: 10 },
+        (loc) => setStandort({ latitude: loc.coords.latitude, longitude: loc.coords.longitude })
+      );
+    } catch (e) {
+      console.log('Karten-Standort-Watch Fehler (ignoriert):', e);
+    }
+  };
+
+  const stoppeKartenStandortWatch = () => {
+    if (kartenStandortSubRef.current) {
+      kartenStandortSubRef.current.remove();
+      kartenStandortSubRef.current = null;
+    }
+  };
+
   const starteOnlineBetrieb = (ref: any) => {
     starteStandortHeartbeat(ref); // async, fire-and-forget
+    starteKartenStandortWatch(); // async, fire-and-forget — nur für die eigene Karte
 
     const uid = auth.currentUser?.uid;
     console.log('STARTE ONLINE BETRIEB, uid:', uid);
@@ -469,6 +506,7 @@ export default function FahrerDashboard() {
       clearInterval(locationIntervalRef.current);
       locationIntervalRef.current = null;
     }
+    stoppeKartenStandortWatch();
     // Stufe C: Background-Standort-Updates + location-Foreground-Service beenden.
     // ONLINE_UID_KEY zuerst entfernen — selbst falls stop fehlschlägt, schreibt der
     // Headless-Task dann nichts mehr (er bricht ohne UID ab).
