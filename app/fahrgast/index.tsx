@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Linking,
 } from 'react-native';
@@ -17,6 +16,7 @@ import MapComponent from '@/components/MapComponent';
 import AdressSuche from '@/components/AdressSuche';
 import { KoordType, OrtType } from '@/types';
 import { berechneKm } from '@/utils/distanz';
+import { zeigeHinweis } from '@/utils/dialog';
 import { useTranslation } from 'react-i18next';
 import { applyLanguageForRole } from '@/i18n';
 
@@ -89,7 +89,7 @@ export default function FahrgastHaupt() {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(t('fahrgast.berechtigungFehlt'), t('fahrgast.standortErforderlich'));
+        zeigeHinweis(t('fahrgast.berechtigungFehlt'), t('fahrgast.standortErforderlich'));
         return;
       }
       const loc = await Location.getCurrentPositionAsync({
@@ -223,7 +223,7 @@ export default function FahrgastHaupt() {
 
     const info = angebote[kategorie];
     if (!info.verfuegbar) {
-      Alert.alert(t('fahrgast.nichtVerfuegbar'), t('fahrgast.nichtVerfuegbarText'));
+      zeigeHinweis(t('fahrgast.nichtVerfuegbar'), t('fahrgast.nichtVerfuegbarText'));
       return;
     }
 
@@ -266,7 +266,7 @@ export default function FahrgastHaupt() {
       });
 
       if (!naechsterFahrerId) {
-        Alert.alert(t('fahrgast.keinFahrer'), t('fahrgast.keinFahrerText'));
+        zeigeHinweis(t('fahrgast.keinFahrer'), t('fahrgast.keinFahrerText'));
         setLaden(false);
         return;
       }
@@ -299,7 +299,7 @@ export default function FahrgastHaupt() {
       router.push(`/fahrgast/suchen?fahrtId=${docRef.id}` as any);
     } catch (e) {
       console.error(e);
-      Alert.alert(t('allgemein.fehler'), t('fahrgast.fahrtFehler'));
+      zeigeHinweis(t('allgemein.fehler'), t('fahrgast.fahrtFehler'));
     } finally {
       setLaden(false);
     }

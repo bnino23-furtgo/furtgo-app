@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   ScrollView,
   KeyboardAvoidingView,
@@ -25,6 +24,7 @@ import {
 import { doc, setDoc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '@/constants/firebase';
+import { zeigeHinweis, bestaetige } from '@/utils/dialog';
 import { useTranslation } from 'react-i18next';
 import { supportedLanguages, driverLanguages, changeLanguage } from '@/i18n';
 
@@ -126,7 +126,7 @@ export default function ProfilScreen() {
 
   const profilSpeichern = async () => {
     if (!vorname.trim() || !nachname.trim()) {
-      Alert.alert(t('allgemein.fehler'), t('login.fehlerName'));
+      zeigeHinweis(t('allgemein.fehler'), t('login.fehlerName'));
       return;
     }
     const uid = user?.uid;
@@ -145,9 +145,9 @@ export default function ProfilScreen() {
       if (istFahrer) {
         await setDoc(doc(db, 'fahrer', uid), { name: vollname }, { merge: true });
       }
-      Alert.alert(t('profil.gespeichert'), t('profil.datenAktualisiert'));
+      zeigeHinweis(t('profil.gespeichert'), t('profil.datenAktualisiert'));
     } catch (e: any) {
-      Alert.alert(t('allgemein.fehler'), e.message ?? t('allgemein.fehler'));
+      zeigeHinweis(t('allgemein.fehler'), e.message ?? t('allgemein.fehler'));
     } finally {
       setLadenProfil(false);
     }
@@ -155,15 +155,15 @@ export default function ProfilScreen() {
 
   const passwortAendern = async () => {
     if (!altesPasswort || !neuesPasswort || !passwortBestaetigen) {
-      Alert.alert(t('allgemein.fehler'), t('login.fehlerEmailPasswort'));
+      zeigeHinweis(t('allgemein.fehler'), t('login.fehlerEmailPasswort'));
       return;
     }
     if (neuesPasswort !== passwortBestaetigen) {
-      Alert.alert(t('allgemein.fehler'), t('login.fehlerPasswort'));
+      zeigeHinweis(t('allgemein.fehler'), t('login.fehlerPasswort'));
       return;
     }
     if (neuesPasswort.length < 6) {
-      Alert.alert(t('allgemein.fehler'), t('login.fehlerSchwachesPasswort'));
+      zeigeHinweis(t('allgemein.fehler'), t('login.fehlerSchwachesPasswort'));
       return;
     }
     setLadenPasswort(true);
@@ -175,14 +175,14 @@ export default function ProfilScreen() {
       setAltesPasswort('');
       setNeuesPasswort('');
       setPasswortBestaetigen('');
-      Alert.alert(t('allgemein.erfolg'), t('profil.passwortGeaendert'));
+      zeigeHinweis(t('allgemein.erfolg'), t('profil.passwortGeaendert'));
     } catch (e: any) {
       const meldungen: Record<string, string> = {
         'auth/wrong-password': t('login.fehlerPasswort'),
         'auth/invalid-credential': t('login.fehlerPasswort'),
         'auth/too-many-requests': t('allgemein.fehler'),
       };
-      Alert.alert(t('allgemein.fehler'), meldungen[e.code] ?? e.message ?? t('allgemein.fehler'));
+      zeigeHinweis(t('allgemein.fehler'), meldungen[e.code] ?? e.message ?? t('allgemein.fehler'));
     } finally {
       setLadenPasswort(false);
     }
@@ -194,16 +194,16 @@ export default function ProfilScreen() {
     } catch (e: any) {
       setLoeschenModal(false);
       if (e.code === 'auth/requires-recent-login') {
-        Alert.alert(t('profil.erneutAnmelden'), t('profil.erneutAnmeldenText'));
+        zeigeHinweis(t('profil.erneutAnmelden'), t('profil.erneutAnmeldenText'));
       } else {
-        Alert.alert(t('allgemein.fehler'), t('allgemein.fehler'));
+        zeigeHinweis(t('allgemein.fehler'), t('allgemein.fehler'));
       }
     }
   };
 
   const supportSenden = async () => {
     if (!supportThema.trim() || !supportNachricht.trim()) {
-      Alert.alert(t('allgemein.fehler'), t('allgemein.fehler'));
+      zeigeHinweis(t('allgemein.fehler'), t('allgemein.fehler'));
       return;
     }
     const uid = user?.uid;
@@ -236,9 +236,9 @@ export default function ProfilScreen() {
       setSupportModal(false);
       setSupportThema('');
       setSupportNachricht('');
-      Alert.alert(t('profil.gesendet'), t('profil.gesendetText'));
+      zeigeHinweis(t('profil.gesendet'), t('profil.gesendetText'));
     } catch {
-      Alert.alert(t('allgemein.fehler'), t('allgemein.fehler'));
+      zeigeHinweis(t('allgemein.fehler'), t('allgemein.fehler'));
     } finally {
       setSupportLaden(false);
     }
@@ -471,20 +471,15 @@ export default function ProfilScreen() {
 
         <TouchableOpacity
           style={styles.abmeldenButton}
-          onPress={() => {
-            // Alert.alert ist auf react-native-web ein No-Op → im Web erschiene kein
-            // Dialog und signOut liefe nie. Daher web-tauglicher window.confirm-Fallback.
-            if (Platform.OS === 'web') {
-              const ok = typeof window !== 'undefined'
-                ? window.confirm(`${t('fahrer.abmeldenFrage')}\n\n${t('fahrer.abmeldenText')}`)
-                : true;
-              if (ok) signOut(auth);
-              return;
-            }
-            Alert.alert(t('fahrer.abmeldenFrage'), t('fahrer.abmeldenText'), [
-              { text: t('fahrer.abbrechen'), style: 'cancel' },
-              { text: t('fahrer.abmelden'), style: 'destructive', onPress: () => signOut(auth) },
-            ]);
+          onPress={async () => {
+            const ok = await bestaetige({
+              titel: t('fahrer.abmeldenFrage'),
+              nachricht: t('fahrer.abmeldenText'),
+              bestaetigenText: t('fahrer.abmelden'),
+              abbrechenText: t('fahrer.abbrechen'),
+              destruktiv: true,
+            });
+            if (ok) signOut(auth);
           }}
         >
           <Text style={styles.abmeldenText}>{t('fahrer.abmelden')}</Text>
