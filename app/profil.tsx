@@ -471,12 +471,21 @@ export default function ProfilScreen() {
 
         <TouchableOpacity
           style={styles.abmeldenButton}
-          onPress={() =>
+          onPress={() => {
+            // Alert.alert ist auf react-native-web ein No-Op → im Web erschiene kein
+            // Dialog und signOut liefe nie. Daher web-tauglicher window.confirm-Fallback.
+            if (Platform.OS === 'web') {
+              const ok = typeof window !== 'undefined'
+                ? window.confirm(`${t('fahrer.abmeldenFrage')}\n\n${t('fahrer.abmeldenText')}`)
+                : true;
+              if (ok) signOut(auth);
+              return;
+            }
             Alert.alert(t('fahrer.abmeldenFrage'), t('fahrer.abmeldenText'), [
               { text: t('fahrer.abbrechen'), style: 'cancel' },
               { text: t('fahrer.abmelden'), style: 'destructive', onPress: () => signOut(auth) },
-            ])
-          }
+            ]);
+          }}
         >
           <Text style={styles.abmeldenText}>{t('fahrer.abmelden')}</Text>
         </TouchableOpacity>
