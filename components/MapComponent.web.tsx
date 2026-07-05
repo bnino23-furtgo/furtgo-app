@@ -31,6 +31,15 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort }: Prop
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const routeLayerRef = useRef<any>(null);
+  const standortRef = useRef(standort);
+  standortRef.current = standort;
+
+  // Karte auf den eigenen Standort zentrieren (Web-Pendant zum Button der nativen Karte)
+  const aufStandortZentrieren = () => {
+    const s = standortRef.current;
+    if (!s || !mapRef.current) return;
+    mapRef.current.setView([s.latitude, s.longitude], mapRef.current.getZoom());
+  };
 
   useEffect(() => {
     if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
@@ -58,7 +67,10 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort }: Prop
         ? ([standort.latitude, standort.longitude] as [number, number])
         : ([ZUERICH.lat, ZUERICH.lng] as [number, number]);
 
-      mapRef.current = L.map(containerRef.current).setView(center, 14);
+      // Zoom-Control (+/-) nach unten-LINKS: oben-links bleibt frei für den Zurück-Pfeil,
+      // unten-rechts frei für den SOS-Button. Der Zentrier-Button wird darüber gestapelt.
+      mapRef.current = L.map(containerRef.current, { zoomControl: false }).setView(center, 14);
+      L.control.zoom({ position: 'bottomleft' }).addTo(mapRef.current);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
       }).addTo(mapRef.current);
@@ -146,6 +158,39 @@ export default function MapComponent({ standort, zielOrt, fahrerStandort }: Prop
   }, [standort, zielOrt, fahrerStandort]);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 400 }} />
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 400 }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 400 }} />
+      {standort && (
+        <button
+          type="button"
+          onClick={aufStandortZentrieren}
+          aria-label="Auf meinen Standort zentrieren"
+          style={{
+            position: 'absolute',
+            left: 10,
+            bottom: 78, // über dem Zoom-Control (unten-links), nicht überlappend
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            border: 'none',
+            backgroundColor: '#FFD700',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+            zIndex: 1000,
+          }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a1a2e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <line x1="12" y1="2" x2="12" y2="5" />
+            <line x1="12" y1="19" x2="12" y2="22" />
+            <line x1="2" y1="12" x2="5" y2="12" />
+            <line x1="19" y1="12" x2="22" y2="12" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
