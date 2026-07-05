@@ -5,6 +5,7 @@ interface Props {
   standort?: KoordType | null;
   zielOrt?: (KoordType & { adresse?: string }) | null;
   fahrerStandort?: KoordType | null;
+  standortAlsLogo?: boolean;
 }
 
 const LEAFLET_CSS =

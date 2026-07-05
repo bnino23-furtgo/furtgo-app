@@ -216,7 +216,7 @@ export default function FahrgastHaupt() {
   };
 
   const fahrerAnfordern = async () => {
-    const startOrt = abholOrt ?? (standort ? { ...standort, adresse: abholOrt?.adresse ?? 'Mein Standort' } : null);
+    const startOrt = abholOrt ?? (standort ? { ...standort, adresse: 'Mein Standort' } : null);
     if (!startOrt || !zielOrt || !angebote) return;
     const user = auth.currentUser;
     if (!user) return;
