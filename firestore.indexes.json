@@ -7,6 +7,15 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "zugewiesenerFahrerId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "fahrer",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "abo.provider", "order": "ASCENDING" },
+        { "fieldPath": "abo.status", "order": "ASCENDING" },
+        { "fieldPath": "abo.nextChargeAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
