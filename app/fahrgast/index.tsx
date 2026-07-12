@@ -200,11 +200,22 @@ export default function FahrgastHaupt() {
   }, [abholOrt, zielOrt, standort]);
 
   const gpsZuruecksetzen = async () => {
-    if (standort) {
-      const adresse = await reverseGeocode(standort.latitude, standort.longitude);
-      setAbholOrt({ ...standort, adresse });
-      setAbholSchluessel((k) => k + 1);
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      zeigeHinweis(t('fahrgast.berechtigungFehlt'), t('fahrgast.standortErforderlich'));
+      return;
     }
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    });
+    const koord = {
+      latitude: loc.coords.latitude,
+      longitude: loc.coords.longitude,
+    };
+    setStandort(koord);
+    const adresse = await reverseGeocode(koord.latitude, koord.longitude);
+    setAbholOrt({ ...koord, adresse });
+    setAbholSchluessel((k) => k + 1);
   };
 
   const onAbholAuswaehlen = (ort: OrtType) => {
